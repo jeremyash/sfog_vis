@@ -122,7 +122,7 @@ sfog_ll <- terra::crop(sfog_ll, region_8_v)
 sfog_ll <- terra::mask(sfog_ll, region_8_v)
 
 cache <- list(
-  sfog_ll = sfog_ll,
+  sfog_ll = terra::wrap(sfog_ll),
   r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = Sys.time()

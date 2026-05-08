@@ -17,8 +17,17 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Check out repo
+      - name: Check out main branch
         uses: actions/checkout@v4
+        with:
+          ref: main
+          path: main-repo
+
+      - name: Check out cache branch
+        uses: actions/checkout@v4
+        with:
+          ref: cache-data
+          path: cache-repo
 
       - name: Install spatial system dependencies
         run: |
@@ -41,12 +50,22 @@ jobs:
             any::lubridate
 
       - name: Build cache
-        run: Rscript scripts/build_ndfd_superfog_cache.R
+        run: |
+          cd main-repo
+          Rscript scripts/build_ndfd_superfog_cache.R
 
+      - name: Copy cache to cache branch
+        run: |
+          mkdir -p cache-repo/cache
+          cp main-repo/cache/ndfd_superfog_cache.rds cache-repo/cache/
+          
       - name: Commit updated cache
         run: |
+          cd cache-repo
+      
           git config user.name "github-actions"
           git config user.email "github-actions@github.com"
+      
           git add cache/ndfd_superfog_cache.rds
           git commit -m "Update NDFD superfog cache" || echo "No changes to commit"
-          git push
+          git push origin cache-data

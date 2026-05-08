@@ -43,9 +43,24 @@ download_ndfd <- function(file) {
   out
 }
 
+ndfd_conus_crs <- paste(
+  "+proj=lcc",
+  "+lat_1=25",
+  "+lat_2=25",
+  "+lat_0=25",
+  "+lon_0=-95",
+  "+x_0=0",
+  "+y_0=0",
+  "+datum=WGS84",
+  "+units=m",
+  "+no_defs"
+)
+
 read_variable_conus <- function(file, convert_fun = NULL) {
   path <- download_ndfd(file)
   out <- terra::rast(path)
+  
+  terra::crs(out) <- ndfd_conus_crs
   
   if (!is.null(convert_fun)) {
     out <- convert_fun(out)
@@ -103,6 +118,7 @@ r_temp <- r_temp[[1:n]]
 r_rh   <- r_rh[[1:n]]
 r_wind <- r_wind[[1:n]]
 r_sky  <- r_sky[[1:n]]
+
 
 valid_times <- terra::time(r_temp)
 

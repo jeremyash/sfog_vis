@@ -4,9 +4,14 @@ library(terra)
 library(sf)
 library(lubridate)
 
-region_8 <- st_read("region_8", quiet = TRUE)
-region_8_sf <- sf::st_transform(region_8, 4326)
-region_8_v  <- terra::vect(region_8_sf)
+r8_outline <- st_read(
+  "r8_outline.gpkg",
+  layer = "r8_outline",
+  quiet = TRUE
+)
+
+r8_outline_sf <- st_transform(r8_outline, 4326)
+r8_outline_v  <- terra::vect(r8_outline_sf)
 
 r8_forests <- st_read("r8_forests", quiet = TRUE)
 r8_forests_sf <- sf::st_transform(r8_forests, 4326)
@@ -46,7 +51,7 @@ read_variable_conus <- function(file, convert_fun = NULL) {
     out <- convert_fun(out)
   }
   
-  region_8_match <- terra::project(region_8_v, terra::crs(out))
+  region_8_match <- terra::project(r8_outline_v, terra::crs(out))
   
   out <- terra::crop(out, region_8_match)
   out <- terra::mask(out, region_8_match)
@@ -118,8 +123,8 @@ sfog <- classify_superfog_score(r_temp, r_rh, r_wind, r_sky)
 names(sfog) <- format(valid_times, "%Y-%m-%d %H:%M")
 
 sfog_ll <- terra::project(sfog, "EPSG:4326", method = "near")
-sfog_ll <- terra::crop(sfog_ll, region_8_v)
-sfog_ll <- terra::mask(sfog_ll, region_8_v)
+sfog_ll <- terra::crop(sfog_ll, r8_outline_v)
+sfog_ll <- terra::mask(sfog_ll, r8_outline_v)
 
 cache <- list(
   sfog_ll = terra::wrap(sfog_ll),

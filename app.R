@@ -9,14 +9,14 @@ library(sf)
 library(htmltools)
 library(lubridate)
 
-cache_url <- "https://raw.githubusercontent.com/YOUR_USER/YOUR_REPO/main/cache/ndfd_superfog_cache.rds"
+cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/main/cache/ndfd_superfog_cache.rds"
 
 cache_file <- tempfile(fileext = ".rds")
 download.file(cache_url, cache_file, mode = "wb")
 
 cache <- readRDS(cache_file)
 
-sfog_ll <- cache$sfog_ll
+sfog_ll <- terra::unwrap(cache$sfog_ll)
 r8_forests_sf <- cache$r8_forests_sf
 layer_labels <- names(sfog_ll)
 last_refresh <- cache$last_refresh

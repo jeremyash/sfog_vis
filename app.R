@@ -9,7 +9,7 @@ library(sf)
 library(htmltools)
 library(lubridate)
 
-cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/main/cache/ndfd_superfog_cache.rds"
+cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
 cache_file <- tempfile(fileext = ".rds")
 download.file(cache_url, cache_file, mode = "wb")

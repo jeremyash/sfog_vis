@@ -1,3 +1,5 @@
+ ## Data for superfog visualization: https://vlab.noaa.gov/web/mdl/ndfd
+
 library(terra)
 library(sf)
 library(lubridate)

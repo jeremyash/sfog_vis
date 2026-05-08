@@ -192,7 +192,7 @@ if (is.null(layer_labels) || any(layer_labels == "")) {
 }
 
 ui <- fluidPage(
-  titlePanel("NDFD Superfog Screening"),
+  titlePanel("USFS Southern Area Superfog Risk"),
   
   sidebarLayout(
     sidebarPanel(

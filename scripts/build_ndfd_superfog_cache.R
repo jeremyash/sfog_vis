@@ -51,11 +51,6 @@ read_variable_conus <- function(file, convert_fun = NULL) {
     out <- convert_fun(out)
   }
   
-  region_8_match <- terra::project(r8_outline_v, terra::crs(out))
-  
-  out <- terra::crop(out, region_8_match)
-  out <- terra::mask(out, region_8_match, touches = TRUE)
-  
   out
 }
 

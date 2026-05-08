@@ -200,7 +200,8 @@ server <- function(input, output, session) {
         colors = pal,
         opacity = 0.7,
         project = FALSE,
-        group = "Superfog Risk"
+        group = "Superfog Risk",
+        maxBytes = 50 * 1024 * 1024
       ) |>
       
       addControl(
@@ -238,9 +239,10 @@ server <- function(input, output, session) {
       addRasterImage(
         sfog_ll[[input$hour]],
         colors = pal,
-        opacity = 0.8,
+        opacity = 0.7,
         project = FALSE,
-        group = "Superfog Risk"
+        group = "Superfog Risk",
+        maxBytes = 50 * 1024 * 1024
       )
   }, ignoreInit = TRUE)
 }

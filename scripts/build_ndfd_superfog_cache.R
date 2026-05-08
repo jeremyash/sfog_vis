@@ -59,7 +59,7 @@ read_variable_conus <- function(file, convert_fun = NULL) {
   path <- download_ndfd(file)
   out <- terra::rast(path)
   
-  terra::crs(out) <- ndfd_conus_crs
+  # terra::crs(out) <- ndfd_conus_crs
   
   if (!is.null(convert_fun)) {
     out <- convert_fun(out)

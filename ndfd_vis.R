@@ -276,8 +276,27 @@ server <- function(input, output, session) {
   })
   
   output$sfog_map <- renderLeaflet({
+    
     leaflet() |>
       addProviderTiles(providers$CartoDB.Voyager) |>
+      
+      fitBounds(
+        lng1 = -95,
+        lat1 = 24,
+        lng2 = -75,
+        lat2 = 38
+      ) |>
+      
+      addPolygons(
+        data = r8_forests_sf,
+        color = "darkgreen",
+        weight = 1.2,
+        opacity = 0.8,
+        fillColor = "darkgreen",
+        fillOpacity = 0.15,
+        group = "Region 8 Forests"
+      ) |>
+      
       addRasterImage(
         sfog_ll[[1]],
         colors = pal,
@@ -286,6 +305,7 @@ server <- function(input, output, session) {
         method = "ngb",
         group = "superfog"
       ) |>
+      
       addControl(
         html = legend_html,
         position = "bottomright"

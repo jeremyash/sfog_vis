@@ -54,7 +54,7 @@ read_variable_conus <- function(file, convert_fun = NULL) {
   region_8_match <- terra::project(r8_outline_v, terra::crs(out))
   
   out <- terra::crop(out, region_8_match)
-  out <- terra::mask(out, region_8_match)
+  out <- terra::mask(out, region_8_match, touches = TRUE)
   
   out
 }
@@ -124,7 +124,9 @@ names(sfog) <- format(valid_times, "%Y-%m-%d %H:%M")
 
 sfog_ll <- terra::project(sfog, "EPSG:4326", method = "near")
 sfog_ll <- terra::crop(sfog_ll, r8_outline_v)
-sfog_ll <- terra::mask(sfog_ll, r8_outline_v)
+sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
+sfog_ll <- terra::round(sfog_ll)
+sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
 
 cache <- list(
   sfog_ll = terra::wrap(sfog_ll),

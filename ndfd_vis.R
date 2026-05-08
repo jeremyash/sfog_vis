@@ -1,16 +1,30 @@
+# ----------------------------
+# 0. Packages and basic data
+# ----------------------------
+
 library(terra)
+library(sf)
 library(htmltools)
 library(jsonlite)
 library(lubridate)
 library(shiny)
 library(leaflet)
 
+# gis
+region_8 <- st_read("region_8")
+region_8_sf <- sf::st_transform(region_8, 4326)
+region_8_v  <- terra::vect(region_8_sf)
+
+r8_forests <- st_read("r8_forests")
+r8_forests_sf <- sf::st_transform(r8_forests, 4326)
 
 # ----------------------------
 # 1. Download NDFD Day 1-3 SE grids
 # ----------------------------
 
-base_url <- "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.seast/VP.001-003"
+base_url <- "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd"
+
+ndfd_areas <- c("AR.conus")
 
 files <- c(
   temp = "ds.temp.bin",
@@ -19,14 +33,18 @@ files <- c(
   sky  = "ds.sky.bin"
 )
 
-dir.create("ndfd_seast", showWarnings = FALSE)
+dir.create("ndfd_region8", showWarnings = FALSE)
 
-download_ndfd <- function(x) {
-  out <- file.path("ndfd_seast", sub("\\.bin$", ".grib2", x))
+download_ndfd <- function(file) {
+  
+  out <- file.path(
+    "ndfd_region8",
+    paste0("AR.conus_", sub("\\.bin$", ".grib2", file))
+  )
   
   if (!file.exists(out)) {
     download.file(
-      file.path(base_url, x),
+      url = paste(base_url, "AR.conus", "VP.001-003", file, sep = "/"),
       destfile = out,
       mode = "wb",
       quiet = FALSE
@@ -36,16 +54,35 @@ download_ndfd <- function(x) {
   out
 }
 
-paths <- lapply(files, download_ndfd)
+read_variable_conus <- function(file, convert_fun = NULL) {
+  
+  path <- download_ndfd(file)
+  out <- terra::rast(path)
+  
+  if (!is.null(convert_fun)) {
+    out <- convert_fun(out)
+  }
+  
+  region_8_match <- terra::project(region_8_v, terra::crs(out))
+  
+  out <- terra::crop(out, region_8_match)
+  out <- terra::mask(out, region_8_match)
+  
+  out
+}
 
-r_temp <- rast(paths$temp)
-r_rh   <- rast(paths$rh)
-r_wind <- rast(paths$wind)
-r_sky  <- rast(paths$sky)
+r_temp <- read_variable_conus(
+  files["temp"],
+  convert_fun = function(x) (x * 9 / 5) + 32
+)
 
-# Unit conversions
-r_temp <- (r_temp * 9/5) + 32      # C -> F
-r_wind <- r_wind * 2.23694         # m/s -> mph
+r_wind <- read_variable_conus(
+  files["wind"],
+  convert_fun = function(x) x * 2.23694
+)
+
+r_rh <- read_variable_conus(files["rh"])
+r_sky <- read_variable_conus(files["sky"])
 
 # ----------------------------
 # 2. Align layers
@@ -108,17 +145,11 @@ names(sfog) <- format(valid_times, "%Y-%m-%d %H:%M")
 # Optional: reduce file size for faster local viewing
 # sfog <- aggregate(sfog, fact = 2, method = "modal", na.rm = TRUE)
 
-# Project to lat/lon for Leaflet
+# Project to lat/lon for Leaflet and crop to R8
 sfog_ll <- project(sfog, "EPSG:4326", method = "near")
+sfog_ll <- terra::crop(sfog_ll, region_8_v)
+sfog_ll <- terra::mask(sfog_ll, region_8_v)
 
-# Crop to cells that actually have data
-valid_mask <- app(sfog_ll, fun = function(x) {
-  ifelse(any(!is.na(x)), 1, NA)
-})
-
-valid_poly <- as.polygons(valid_mask, dissolve = TRUE, na.rm = TRUE)
-
-sfog_ll <- crop(sfog_ll, valid_poly, mask = TRUE)
 
 # ----------------------------
 # 4. PLotting

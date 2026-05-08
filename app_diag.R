@@ -9,7 +9,7 @@ library(sf)
 library(htmltools)
 library(lubridate)
 
-cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/main/cache/ndfd_superfog_cache.rds"
+cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
 cache_file <- tempfile(fileext = ".rds")
 download.file(cache_url, cache_file, mode = "wb")
@@ -50,6 +50,38 @@ r8_outline <- sf::st_read(
   quiet = TRUE
 ) |>
   sf::st_transform(4326)
+
+
+# footprint across all layers
+footprint_all <- app(sfog_ll, function(x) {
+  ifelse(any(!is.na(x)), 1, NA)
+})
+
+# footprint for selected layer only
+i <- 1
+footprint_one <- sfog_ll[[i]]
+footprint_one[!is.na(footprint_one)] <- 1
+
+leaflet() |>
+  addProviderTiles(providers$CartoDB.Voyager) |>
+  addRasterImage(
+    footprint_all,
+    colors = colorNumeric("blue", domain = c(1, 1), na.color = "transparent"),
+    opacity = 0.3,
+    project = FALSE,
+    group = "Footprint all layers"
+  ) |>
+  addRasterImage(
+    footprint_one,
+    colors = colorNumeric("red", domain = c(1, 1), na.color = "transparent"),
+    opacity = 0.5,
+    project = FALSE,
+    group = "Footprint selected layer"
+  ) |>
+  addLayersControl(
+    overlayGroups = c("Footprint all layers", "Footprint selected layer"),
+    options = layersControlOptions(collapsed = FALSE)
+  )
 
 
 # ----------------------------

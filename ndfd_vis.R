@@ -1,8 +1,14 @@
 library(terra)
-library(sf)
-library(dplyr)
-library(leaflet)
+library(htmltools)
+library(jsonlite)
 library(lubridate)
+library(shiny)
+library(leaflet)
+
+
+# ----------------------------
+# 1. Download NDFD Day 1-3 SE grids
+# ----------------------------
 
 base_url <- "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd/AR.seast/VP.001-003"
 
@@ -16,9 +22,17 @@ files <- c(
 dir.create("ndfd_seast", showWarnings = FALSE)
 
 download_ndfd <- function(x) {
-  url <- file.path(base_url, x)
   out <- file.path("ndfd_seast", sub("\\.bin$", ".grib2", x))
-  download.file(url, out, mode = "wb", quiet = FALSE)
+  
+  if (!file.exists(out)) {
+    download.file(
+      file.path(base_url, x),
+      destfile = out,
+      mode = "wb",
+      quiet = FALSE
+    )
+  }
+  
   out
 }
 
@@ -29,12 +43,18 @@ r_rh   <- rast(paths$rh)
 r_wind <- rast(paths$wind)
 r_sky  <- rast(paths$sky)
 
-# Align grids
-r_rh   <- resample(r_rh, r_temp)
-r_wind <- resample(r_wind, r_temp)
-r_sky  <- resample(r_sky, r_temp)
+# Unit conversions
+r_temp <- (r_temp * 9/5) + 32      # C -> F
+r_wind <- r_wind * 2.23694         # m/s -> mph
 
-# Make sure layer counts match
+# ----------------------------
+# 2. Align layers
+# ----------------------------
+
+r_rh   <- resample(r_rh, r_temp, method = "near")
+r_wind <- resample(r_wind, r_temp, method = "near")
+r_sky  <- resample(r_sky, r_temp, method = "near")
+
 n <- min(nlyr(r_temp), nlyr(r_rh), nlyr(r_wind), nlyr(r_sky))
 
 r_temp <- r_temp[[1:n]]
@@ -42,78 +62,252 @@ r_rh   <- r_rh[[1:n]]
 r_wind <- r_wind[[1:n]]
 r_sky  <- r_sky[[1:n]]
 
-classify_superfog <- function(temp, rh, wind, sky) {
-  temp_bad <- temp <= 55
-  rh_bad   <- rh >= 90
-  wind_bad <- wind <= 4
-  sky_bad  <- sky <= 40
-  
-  n_bad <- temp_bad + rh_bad + wind_bad + sky_bad
-  
-  # 3 = PB Piedmont Required
-  # 2 = PB Piedmont Recommended
-  # 1 = Watch
-  # 0 = Minimal
-  classify(
-    n_bad,
-    rcl = matrix(
-      c(
-        0, 0, 0,
-        1, 2, 1,
-        3, 3, 2,
-        4, 4, 3
-      ),
-      ncol = 3,
-      byrow = TRUE
-    )
+valid_times <- time(r_temp)
+
+if (is.null(valid_times) || all(is.na(valid_times))) {
+  valid_times <- seq(
+    from = floor_date(Sys.time(), "hour"),
+    by = "1 hour",
+    length.out = n
   )
 }
 
-sfog <- classify_superfog(r_temp, r_rh, r_wind, r_sky)
+# ----------------------------
+# 3. Classify superfog risk
+# ----------------------------
 
-names(sfog) <- paste0("hour_", seq_len(nlyr(sfog)))
+classify_superfog_score <- function(temp, rh, wind, sky) {
+  
+  # Critical thresholds
+  temp_critical <- temp <= 55
+  rh_critical   <- rh >= 90
+  wind_critical <- wind <= 4
+  sky_critical  <- sky <= 40
+  
+  # Watchout-or-critical thresholds
+  temp_watch <- temp <= 70
+  rh_watch   <- rh >= 70
+  wind_watch <- wind <= 7
+  sky_watch  <- sky <= 60
+  
+  n_watch <- temp_watch + rh_watch + wind_watch + sky_watch
+  n_crit  <- temp_critical + rh_critical + wind_critical + sky_critical
+  
+  # 0-3 = number of watchout variables met
+  # 4-8 = all 4 watchout met, plus critical severity
+  ifel(
+    n_watch < 4,
+    n_watch,
+    4 + n_crit
+  )
+}
 
-pal <- colorFactor(
+sfog <- classify_superfog_score(r_temp, r_rh, r_wind, r_sky)
+names(sfog) <- format(valid_times, "%Y-%m-%d %H:%M")
+
+# Optional: reduce file size for faster local viewing
+# sfog <- aggregate(sfog, fact = 2, method = "modal", na.rm = TRUE)
+
+# Project to lat/lon for Leaflet
+sfog_ll <- project(sfog, "EPSG:4326", method = "near")
+
+# Crop to cells that actually have data
+valid_mask <- app(sfog_ll, fun = function(x) {
+  ifelse(any(!is.na(x)), 1, NA)
+})
+
+valid_poly <- as.polygons(valid_mask, dissolve = TRUE, na.rm = TRUE)
+
+sfog_ll <- crop(sfog_ll, valid_poly, mask = TRUE)
+
+# ----------------------------
+# 4. PLotting
+# ----------------------------
+
+pal <- leaflet::colorFactor(
   palette = c(
-    "0" = "#58afdd",
-    "1" = "#FFDA00",
-    "2" = "#FF9900",
-    "3" = "#CA0020"
+    "0" = "#F2F2F2",  # none
+    "1" = "#D9EAF7",  # low
+    "2" = "#A9D3EA",  # moderate-low
+    "3" = "#58AFDD",  # near threshold
+    "4" = "#FFDA00",  # all watchout met
+    "5" = "#FFB000",  # all watchout + 1 critical
+    "6" = "#FF7A00",  # all watchout + 2 critical
+    "7" = "#E64B00",  # all watchout + 3 critical
+    "8" = "#CA0020"   # all critical
   ),
-  domain = c(0, 1, 2, 3),
+  domain = 0:8,
   na.color = "transparent"
 )
 
-labels <- c(
-  "0" = "Minimal",
-  "1" = "Watch",
-  "2" = "PB Piedmont Recommended",
-  "3" = "PB Piedmont Required"
-)
+legend_html <- HTML('
+<div style="background:white; padding:10px; border-radius:6px;">
+  <div style="font-weight:bold; margin-bottom:6px;">Superfog Risk</div>
+  <div><span style="background:#F2F2F2; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
+  <div><span style="background:#D9EAF7; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 1</div>
+  <div><span style="background:#A9D3EA; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 2</div>
+  <div><span style="background:#58AFDD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 3</div>
+  <div><span style="background:#FFDA00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Watchout</div>
+  <div><span style="background:#FFB000; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 5</div>
+  <div><span style="background:#FF7A00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 6</div>
+  <div><span style="background:#E64B00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 7</div>
+  <div><span style="background:#CA0020; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Critical</div>
+</div>
+')
+layer_labels <- names(sfog_ll)
 
-m <- leaflet() |>
-  addProviderTiles(providers$CartoDB.Voyager)
-
-for (i in seq_len(nlyr(sfog))) {
-  m <- m |>
-    addRasterImage(
-      sfog[[i]],
-      colors = pal,
-      opacity = 0.65,
-      group = names(sfog)[i],
-      project = TRUE
-    )
+if (is.null(layer_labels) || any(layer_labels == "")) {
+  layer_labels <- paste("Forecast hour", seq_len(terra::nlyr(sfog_ll)))
 }
 
-m |>
-  addLayersControl(
-    overlayGroups = names(sfog),
-    options = layersControlOptions(collapsed = FALSE)
-  ) |>
-  addLegend(
-    pal = pal,
-    values = c(0, 1, 2, 3),
-    labels = labels,
-    title = "Superfog Screening",
-    opacity = 0.8
+ui <- fluidPage(
+  titlePanel("NDFD Superfog Screening"),
+  
+  sidebarLayout(
+    sidebarPanel(
+      
+      # -------------------------
+      # Top row: arrows + time
+      # -------------------------
+      
+      fluidRow(
+        
+        column(
+          width = 2,
+          actionButton(
+            "prev_hour",
+            label = NULL,
+            icon = icon("chevron-left"),
+            width = "100%"
+          )
+        ),
+        
+        column(
+          width = 8,
+          div(
+            style = "
+          text-align:center;
+          font-weight:bold;
+          font-size:22px;
+          padding-top:6px;
+        ",
+            textOutput("valid_time")
+          )
+        ),
+        
+        column(
+          width = 2,
+          actionButton(
+            "next_hour",
+            label = NULL,
+            icon = icon("chevron-right"),
+            width = "100%"
+          )
+        )
+      ),
+      
+      br(),
+      
+      # -------------------------
+      # Second row: slider
+      # -------------------------
+      
+      sliderInput(
+        inputId = "hour",
+        label = NULL,
+        min = 1,
+        max = terra::nlyr(sfog_ll),
+        value = 1,
+        step = 1,
+        animate = animationOptions(
+          interval = 900,
+          loop = TRUE
+        )
+      )
+    ),
+    
+    mainPanel(
+      leafletOutput("sfog_map", height = "800px")
+    )
   )
+)
+
+server <- function(input, output, session) {
+  
+  output$valid_time <- renderText({
+    
+    t <- as.POSIXct(layer_labels[input$hour], tz = "UTC")
+    
+    format(
+      lubridate::with_tz(t, "America/New_York"),
+      "%b %d, %Y %I:%M %p ET"
+    )
+  })
+  
+  output$sfog_map <- renderLeaflet({
+    leaflet() |>
+      addProviderTiles(providers$CartoDB.Voyager) |>
+      addRasterImage(
+        sfog_ll[[1]],
+        colors = pal,
+        opacity = 0.7,
+        project = FALSE,
+        method = "ngb",
+        group = "superfog"
+      ) |>
+      addControl(
+        html = legend_html,
+        position = "bottomright"
+      )
+  })
+  
+  observeEvent(input$prev_hour, {
+    
+    new_val <- max(1, input$hour - 1)
+    
+    updateSliderInput(
+      session,
+      "hour",
+      value = new_val
+    )
+  })
+  
+  observeEvent(input$next_hour, {
+    
+    new_val <- min(terra::nlyr(sfog_ll), input$hour + 1)
+    
+    updateSliderInput(
+      session,
+      "hour",
+      value = new_val
+    )
+  })
+  
+  
+  observeEvent(input$hour, {
+    leafletProxy("sfog_map") |>
+      clearImages() |>
+      addRasterImage(
+        sfog_ll[[input$hour]],
+        colors = pal,
+        opacity = 0.7,
+        project = FALSE,
+        method = "ngb",
+        group = "superfog"
+      )
+  })
+}
+
+shinyApp(ui, server)
+
+
+
+
+
+
+
+
+
+
+
+

@@ -179,10 +179,10 @@ server <- function(input, output, session) {
       addProviderTiles(providers$CartoDB.Voyager) |>
       
       fitBounds(
-        lng1 = -95,
-        lat1 = 24,
-        lng2 = -75,
-        lat2 = 38
+        lng1 = -97,
+        lat1 = 17,
+        lng2 = -64,
+        lat2 = 40
       ) |>
       
       addPolygons(

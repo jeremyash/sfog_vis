@@ -30,7 +30,7 @@ last_refresh <- cache$last_refresh
 
 pal <- leaflet::colorFactor(
   palette = c(
-    "0" = "#F2F2F2",  # none
+    "0" = "#BDBDBD",  # none
     "1" = "#D9EAF7",  # low
     "2" = "#A9D3EA",  # moderate-low
     "3" = "#58AFDD",  # near threshold
@@ -47,7 +47,7 @@ pal <- leaflet::colorFactor(
 legend_html <- HTML('
 <div style="background:white; padding:10px; border-radius:6px;">
   <div style="font-weight:bold; margin-bottom:6px;">Superfog Risk</div>
-  <div><span style="background:#F2F2F2; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
+  <div><span style="background:#BDBDBD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
   <div><span style="background:#D9EAF7; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 1</div>
   <div><span style="background:#A9D3EA; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 2</div>
   <div><span style="background:#58AFDD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 3</div>
@@ -238,12 +238,11 @@ server <- function(input, output, session) {
       addRasterImage(
         sfog_ll[[input$hour]],
         colors = pal,
-        opacity = 0.7,
+        opacity = 0.8,
         project = FALSE,
-        method = "ngb",
-        group = "superfog"
+        group = "Superfog Risk"
       )
-  })
+  }, ignoreInit = TRUE)
 }
 
 shinyApp(ui, server)

@@ -196,12 +196,11 @@ server <- function(input, output, session) {
       ) |>
       
       addRasterImage(
-        sfog_ll[[1]],
+        sfog_ll[[input$hour]],
         colors = pal,
         opacity = 0.7,
         project = FALSE,
-        method = "ngb",
-        group = "superfog"
+        group = "Superfog Risk"
       ) |>
       
       addControl(

@@ -42,7 +42,6 @@ download_ndfd <- function(file) {
   
   out
 }
-
 ndfd_conus_crs <- paste(
   "+proj=lcc",
   "+lat_1=25",
@@ -51,7 +50,7 @@ ndfd_conus_crs <- paste(
   "+lon_0=-95",
   "+x_0=0",
   "+y_0=0",
-  "+datum=WGS84",
+  "+R=6371200",
   "+units=m",
   "+no_defs"
 )
@@ -138,15 +137,9 @@ sfog_ll <- terra::crop(sfog_ll, r8_outline_v)
 sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
-sfog_display <- terra::aggregate(
-  sfog_ll,
-  fact = 2,
-  fun = "modal",
-  na.rm = TRUE
-)
 
 cache <- list(
-  sfog_ll = terra::wrap(sfog_display),
+  sfog_ll = terra::wrap(sfog_ll),
   r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = Sys.time()

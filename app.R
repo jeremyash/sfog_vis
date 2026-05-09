@@ -15,13 +15,12 @@ cache_file <- tempfile(fileext = ".rds")
 download.file(cache_url, cache_file, mode = "wb")
 
 cache <- readRDS(cache_file)
+# cache <- readRDS("cache/ndfd_superfog_cache.rds")
 
 sfog_ll <- terra::unwrap(cache$sfog_ll)
 r8_forests_sf <- cache$r8_forests_sf
 layer_labels <- names(sfog_ll)
 last_refresh <- cache$last_refresh
-
-
 
 
 # ----------------------------
@@ -196,10 +195,11 @@ server <- function(input, output, session) {
       ) |>
       
       addRasterImage(
-        sfog_ll[[input$hour]],
+        sfog_ll[[1]],
         colors = pal,
         opacity = 0.7,
-        project = FALSE,
+        project = TRUE,
+        method = "ngb",
         group = "Superfog Risk",
         maxBytes = 50 * 1024 * 1024
       ) |>
@@ -232,7 +232,6 @@ server <- function(input, output, session) {
     )
   })
   
-  
   observeEvent(input$hour, {
     leafletProxy("sfog_map") |>
       clearImages() |>
@@ -240,12 +239,14 @@ server <- function(input, output, session) {
         sfog_ll[[input$hour]],
         colors = pal,
         opacity = 0.7,
-        project = FALSE,
+        project = TRUE,
+        method = "ngb",
         group = "Superfog Risk",
         maxBytes = 50 * 1024 * 1024
       )
   }, ignoreInit = TRUE)
 }
+
 
 shinyApp(ui, server)
 

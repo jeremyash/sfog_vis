@@ -71,6 +71,16 @@ legend_html <- HTML('
 ui <- fluidPage(
   titlePanel("USFS Southern Area Superfog Risk"),
   
+  tags$head(
+    tags$link(rel = "icon", type = "image/svg+xml", href = "superfog-favicon.svg?v=1"),
+    tags$link(rel = "icon", type = "image/png", sizes = "512x512", href = "superfog-favicon-512x512.png?v=1"),
+    tags$link(rel = "icon", type = "image/png", sizes = "192x192", href = "android-chrome-192x192.png?v=1"),
+    tags$link(rel = "icon", type = "image/png", sizes = "32x32", href = "favicon-32x32.png?v=1"),
+    tags$link(rel = "icon", type = "image/png", sizes = "16x16", href = "favicon-16x16.png?v=1"),
+    tags$link(rel = "shortcut icon", href = "favicon.ico?v=1"),
+    tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "apple-touch-icon.png?v=1")
+  ),
+  
   sidebarLayout(
     sidebarPanel(
       fluidRow(

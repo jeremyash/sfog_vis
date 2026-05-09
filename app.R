@@ -31,18 +31,20 @@ if (is.null(layer_labels) || any(layer_labels == "")) {
 # 2. Plotting objects
 # ----------------------------
 
+risk_colors <- c(
+  "0" = "#F2F2F2",
+  "1" = "#D9EAF7",
+  "2" = "#A9D3EA",
+  "3" = "#58AFDD",
+  "4" = "#FFDA00",
+  "5" = "#FFB000",
+  "6" = "#FF7A00",
+  "7" = "#E64B00",
+  "8" = "#CA0020"
+)
+
 pal <- leaflet::colorFactor(
-  palette = c(
-    "0" = "#F2F2F2",
-    "1" = "#D9EAF7",
-    "2" = "#A9D3EA",
-    "3" = "#58AFDD",
-    "4" = "#FFDA00",
-    "5" = "#FFB000",
-    "6" = "#FF7A00",
-    "7" = "#E64B00",
-    "8" = "#CA0020"
-  ),
+  palette = risk_colors,
   domain = 0:8,
   na.color = "transparent"
 )
@@ -71,18 +73,11 @@ ui <- fluidPage(
   
   sidebarLayout(
     sidebarPanel(
-      
       fluidRow(
         column(
           width = 2,
-          actionButton(
-            "prev_hour",
-            label = NULL,
-            icon = icon("chevron-left"),
-            width = "100%"
-          )
+          actionButton("prev_hour", label = NULL, icon = icon("chevron-left"), width = "100%")
         ),
-        
         column(
           width = 8,
           div(
@@ -97,15 +92,9 @@ ui <- fluidPage(
             textOutput("valid_time")
           )
         ),
-        
         column(
           width = 2,
-          actionButton(
-            "next_hour",
-            label = NULL,
-            icon = icon("chevron-right"),
-            width = "100%"
-          )
+          actionButton("next_hour", label = NULL, icon = icon("chevron-right"), width = "100%")
         )
       ),
       
@@ -118,50 +107,52 @@ ui <- fluidPage(
         max = terra::nlyr(sfog_ll),
         value = 1,
         step = 1,
-        animate = animationOptions(
-          interval = 900,
-          loop = TRUE
-        )
+        animate = animationOptions(interval = 900, loop = TRUE)
       ),
       
       br(),
       
       div(
-        style = "
-          font-size:12px;
-          color:#555;
-          text-align:center;
-        ",
+        style = "font-size:12px; color:#555; text-align:center;",
         textOutput("last_refresh")
       ),
       
       hr(),
       
       h4("Point Risk Time Series"),
+      p("Enter a latitude/longitude or click the map."),
       
-      textInput(
-        "query_lat",
-        "Latitude",
-        value = "",
-        placeholder = "e.g. 35.5951"
-      ),
+      textInput("query_lat", "Latitude", value = "", placeholder = "e.g. 35.5951"),
+      textInput("query_lon", "Longitude", value = "", placeholder = "e.g. -82.5515"),
       
-      textInput(
-        "query_lon",
-        "Longitude",
-        value = "",
-        placeholder = "e.g. -82.5515"
-      ),
-      
-      actionButton(
-        "extract_point",
-        "Plot Point Risk",
-        width = "100%"
-      )
+      actionButton("extract_point", "Plot Point Risk", width = "100%")
     ),
     
     mainPanel(
-      leafletOutput("sfog_map", height = "650px"),
+      div(
+        style = "position:relative;",
+        
+        actionButton(
+          "reset_map_view",
+          "Reset Map View",
+          style = "
+            position:absolute;
+            top:10px;
+            right:10px;
+            z-index:1000;
+            background:white;
+            border:2px solid rgba(0,0,0,0.2);
+            border-radius:4px;
+            padding:6px 10px;
+            font-size:13px;
+            font-weight:600;
+            cursor:pointer;
+            box-shadow:0 1px 4px rgba(0,0,0,0.3);
+          "
+        ),
+        
+        leafletOutput("sfog_map", height = "650px")
+      ),
       br(),
       plotOutput("point_risk_plot", height = "280px")
     )
@@ -174,13 +165,11 @@ ui <- fluidPage(
 
 server <- function(input, output, session) {
   
+  selected_point <- reactiveVal(NULL)
+  
   output$valid_time <- renderText({
     t <- as.POSIXct(layer_labels[input$hour], tz = "UTC")
-    
-    format(
-      lubridate::with_tz(t, "America/New_York"),
-      "%b %d, %Y %I:%M %p ET"
-    )
+    format(lubridate::with_tz(t, "America/New_York"), "%b %d, %Y %I:%M %p ET")
   })
   
   output$last_refresh <- renderText({
@@ -196,14 +185,7 @@ server <- function(input, output, session) {
   output$sfog_map <- renderLeaflet({
     leaflet() |>
       addProviderTiles(providers$CartoDB.Voyager) |>
-      
-      fitBounds(
-        lng1 = -96,
-        lat1 = 24,
-        lng2 = -74,
-        lat2 = 38
-      ) |>
-      
+      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
       addPolygons(
         data = r8_forests_sf,
         color = "darkgreen",
@@ -213,7 +195,6 @@ server <- function(input, output, session) {
         fillOpacity = 0.15,
         group = "Region 8 Forests"
       ) |>
-      
       addRasterImage(
         sfog_ll[[1]],
         colors = pal,
@@ -223,63 +204,15 @@ server <- function(input, output, session) {
         group = "Superfog Risk",
         maxBytes = 50 * 1024 * 1024
       ) |>
-      
-      addControl(
-        html = HTML('
-          <button id="reset_map_view" 
-            style="
-              background:white;
-              border:2px solid rgba(0,0,0,0.2);
-              border-radius:4px;
-              padding:6px 10px;
-              font-size:13px;
-              font-weight:600;
-              cursor:pointer;
-              box-shadow:0 1px 4px rgba(0,0,0,0.3);
-            ">
-            Reset Map View
-          </button>
-        '),
-        position = "topright"
-      ) |>
-      
-      htmlwidgets::onRender("
-        function(el, x) {
-          var map = this;
-          setTimeout(function() {
-            var btn = document.getElementById('reset_map_view');
-            if (btn) {
-              btn.onclick = function() {
-                map.fitBounds([
-                  [24, -96],
-                  [38, -74]
-                ]);
-              };
-            }
-          }, 100);
-        }
-      ") |>
-      
-      addControl(
-        html = legend_html,
-        position = "bottomright"
-      )
+      addControl(html = legend_html, position = "bottomright")
   })
   
   observeEvent(input$prev_hour, {
-    updateSliderInput(
-      session,
-      "hour",
-      value = max(1, input$hour - 1)
-    )
+    updateSliderInput(session, "hour", value = max(1, input$hour - 1))
   })
   
   observeEvent(input$next_hour, {
-    updateSliderInput(
-      session,
-      "hour",
-      value = min(terra::nlyr(sfog_ll), input$hour + 1)
-    )
+    updateSliderInput(session, "hour", value = min(terra::nlyr(sfog_ll), input$hour + 1))
   })
   
   observeEvent(input$hour, {
@@ -296,19 +229,60 @@ server <- function(input, output, session) {
       )
   }, ignoreInit = TRUE)
   
-  point_risk <- eventReactive(input$extract_point, {
+  observeEvent(input$reset_map_view, {
+    selected_point(NULL)
     
-    req(input$query_lat, input$query_lon)
+    updateTextInput(session, "query_lat", value = "")
+    updateTextInput(session, "query_lon", value = "")
     
+    leafletProxy("sfog_map") |>
+      clearGroup("Point Query") |>
+      fitBounds(
+        lng1 = -96,
+        lat1 = 24,
+        lng2 = -74,
+        lat2 = 38
+      )
+  })
+  
+  observeEvent(input$extract_point, {
     lat <- as.numeric(input$query_lat)
     lon <- as.numeric(input$query_lon)
     
-    req(!is.na(lat), !is.na(lon))
-    
-    pt <- data.frame(
+    selected_point(list(
+      lat = lat,
       lon = lon,
-      lat = lat
+      source = "manual"
+    ))
+  })
+  
+  observeEvent(input$sfog_map_click, {
+    lat <- input$sfog_map_click$lat
+    lon <- input$sfog_map_click$lng
+    
+    updateTextInput(session, "query_lat", value = round(lat, 5))
+    updateTextInput(session, "query_lon", value = round(lon, 5))
+    
+    selected_point(list(
+      lat = lat,
+      lon = lon,
+      source = "map"
+    ))
+  })
+  
+  point_risk <- reactive({
+    pt_info <- selected_point()
+    req(pt_info)
+    
+    lat <- pt_info$lat
+    lon <- pt_info$lon
+    
+    validate(
+      need(!is.na(lat), "Please enter a valid latitude."),
+      need(!is.na(lon), "Please enter a valid longitude.")
     )
+    
+    pt <- data.frame(lon = lon, lat = lat)
     
     pt_v <- terra::vect(
       pt,
@@ -316,17 +290,12 @@ server <- function(input, output, session) {
       crs = "EPSG:4326"
     )
     
-    # check whether point falls inside mapped domain
-    
     inside_domain <- !is.na(
-      terra::extract(sfog_ll[[1]], pt_v)[1,2]
+      terra::extract(sfog_ll[[1]], pt_v)[1, 2]
     )
     
     validate(
-      need(
-        inside_domain,
-        "Location is outside of the Southern Area."
-      )
+      need(inside_domain, "Location is outside of the Southern Area.")
     )
     
     vals <- terra::extract(sfog_ll, pt_v)
@@ -338,11 +307,7 @@ server <- function(input, output, session) {
         lng = lon,
         lat = lat,
         group = "Point Query",
-        label = paste0(
-          "Point Query: ",
-          round(lat, 4), ", ",
-          round(lon, 4)
-        )
+        label = paste0("Point Query: ", round(lat, 4), ", ", round(lon, 4))
       ) |>
       fitBounds(
         lng1 = lon - 0.5,
@@ -364,24 +329,10 @@ server <- function(input, output, session) {
       lat = lat,
       lon = lon
     )
-    
   })
   
   output$point_risk_plot <- renderPlot({
-    
     df <- point_risk()
-    
-    risk_colors <- c(
-      "0" = "#F2F2F2",
-      "1" = "#D9EAF7",
-      "2" = "#A9D3EA",
-      "3" = "#58AFDD",
-      "4" = "#FFDA00",
-      "5" = "#FFB000",
-      "6" = "#FF7A00",
-      "7" = "#E64B00",
-      "8" = "#CA0020"
-    )
     
     point_cols <- risk_colors[as.character(df$risk)]
     
@@ -422,24 +373,11 @@ server <- function(input, output, session) {
       las = 2
     )
     
-    # keep dashed lines clipped inside plot panel
     par(xpd = FALSE)
     
-    abline(
-      h = 4,
-      lty = 2,
-      col = "#FFDA00",
-      lwd = 2
-    )
+    abline(h = 4, lty = 2, col = "#FFDA00", lwd = 2)
+    abline(h = 8, lty = 2, col = "#CA0020", lwd = 2)
     
-    abline(
-      h = 8,
-      lty = 2,
-      col = "#CA0020",
-      lwd = 2
-    )
-    
-    # allow only labels to draw outside plot panel
     par(xpd = NA)
     
     usr <- par("usr")
@@ -464,7 +402,6 @@ server <- function(input, output, session) {
       font = 2
     )
     
-    # reset clipping behavior
     par(xpd = FALSE)
   })
 }

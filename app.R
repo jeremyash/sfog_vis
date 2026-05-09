@@ -139,18 +139,18 @@ ui <- fluidPage(
       
       h4("Point Risk Time Series"),
       
-      numericInput(
+      textInput(
         "query_lat",
         "Latitude",
-        value = 35.6,
-        step = 0.01
+        value = "",
+        placeholder = "e.g. 35.5951"
       ),
       
-      numericInput(
+      textInput(
         "query_lon",
         "Longitude",
-        value = -82.55,
-        step = 0.01
+        value = "",
+        placeholder = "e.g. -82.5515"
       ),
       
       actionButton(
@@ -297,11 +297,17 @@ server <- function(input, output, session) {
   }, ignoreInit = TRUE)
   
   point_risk <- eventReactive(input$extract_point, {
+    
     req(input$query_lat, input$query_lon)
     
+    lat <- as.numeric(input$query_lat)
+    lon <- as.numeric(input$query_lon)
+    
+    req(!is.na(lat), !is.na(lon))
+    
     pt <- data.frame(
-      lon = input$query_lon,
-      lat = input$query_lat
+      lon = lon,
+      lat = lat
     )
     
     pt_v <- terra::vect(
@@ -310,26 +316,39 @@ server <- function(input, output, session) {
       crs = "EPSG:4326"
     )
     
+    # check whether point falls inside mapped domain
+    
+    inside_domain <- !is.na(
+      terra::extract(sfog_ll[[1]], pt_v)[1,2]
+    )
+    
+    validate(
+      need(
+        inside_domain,
+        "Location is outside of the Southern Area."
+      )
+    )
+    
     vals <- terra::extract(sfog_ll, pt_v)
     risk_vals <- as.numeric(vals[1, -1])
     
     leafletProxy("sfog_map") |>
       clearGroup("Point Query") |>
       addMarkers(
-        lng = input$query_lon,
-        lat = input$query_lat,
+        lng = lon,
+        lat = lat,
         group = "Point Query",
         label = paste0(
           "Point Query: ",
-          round(input$query_lat, 4), ", ",
-          round(input$query_lon, 4)
+          round(lat, 4), ", ",
+          round(lon, 4)
         )
       ) |>
       fitBounds(
-        lng1 = input$query_lon - 0.5,
-        lat1 = input$query_lat - 0.5,
-        lng2 = input$query_lon + 0.5,
-        lat2 = input$query_lat + 0.5
+        lng1 = lon - 0.5,
+        lat1 = lat - 0.5,
+        lng2 = lon + 0.5,
+        lat2 = lat + 0.5
       )
     
     times_utc <- as.POSIXct(
@@ -341,8 +360,11 @@ server <- function(input, output, session) {
     data.frame(
       time_utc = times_utc,
       time_et = lubridate::with_tz(times_utc, "America/New_York"),
-      risk = risk_vals
+      risk = risk_vals,
+      lat = lat,
+      lon = lon
     )
+    
   })
   
   output$point_risk_plot <- renderPlot({
@@ -377,9 +399,9 @@ server <- function(input, output, session) {
       ylab = "Superfog Risk",
       main = paste0(
         "Superfog Risk at ",
-        round(input$query_lat, 4),
+        round(df$lat[1], 4),
         ", ",
-        round(input$query_lon, 4)
+        round(df$lon[1], 4)
       )
     )
     

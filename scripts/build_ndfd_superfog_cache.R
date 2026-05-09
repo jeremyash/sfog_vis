@@ -42,18 +42,7 @@ download_ndfd <- function(file) {
   
   out
 }
-ndfd_conus_crs <- paste(
-  "+proj=lcc",
-  "+lat_1=25",
-  "+lat_2=25",
-  "+lat_0=25",
-  "+lon_0=-95",
-  "+x_0=0",
-  "+y_0=0",
-  "+R=6371200",
-  "+units=m",
-  "+no_defs"
-)
+
 
 read_variable_conus <- function(file, convert_fun = NULL) {
   path <- download_ndfd(file)

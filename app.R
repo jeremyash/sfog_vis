@@ -8,6 +8,7 @@ library(terra)
 library(sf)
 library(htmltools)
 library(lubridate)
+library(htmlwidgets)
 
 cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
@@ -29,7 +30,7 @@ last_refresh <- cache$last_refresh
 
 pal <- leaflet::colorFactor(
   palette = c(
-    "0" = "#BDBDBD",  # none
+    "0" = "#F2F2F2",  # none
     "1" = "#D9EAF7",  # low
     "2" = "#A9D3EA",  # moderate-low
     "3" = "#58AFDD",  # near threshold
@@ -46,7 +47,7 @@ pal <- leaflet::colorFactor(
 legend_html <- HTML('
 <div style="background:white; padding:10px; border-radius:6px;">
   <div style="font-weight:bold; margin-bottom:6px;">Superfog Risk</div>
-  <div><span style="background:#BDBDBD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
+  <div><span style="background:#F2F2F2; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
   <div><span style="background:#D9EAF7; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 1</div>
   <div><span style="background:#A9D3EA; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 2</div>
   <div><span style="background:#58AFDD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 3</div>
@@ -89,11 +90,13 @@ ui <- fluidPage(
           width = 8,
           div(
             style = "
-          text-align:center;
-          font-weight:bold;
-          font-size:22px;
-          padding-top:6px;
-        ",
+                    display:flex;
+                    align-items:center;
+                    justify-content:center;
+                    height:38px;
+                    font-weight:bold;
+                    font-size:22px;
+                  ",
             textOutput("valid_time")
           )
         ),
@@ -178,10 +181,10 @@ server <- function(input, output, session) {
       addProviderTiles(providers$CartoDB.Voyager) |>
       
       fitBounds(
-        lng1 = -97,
-        lat1 = 17,
-        lng2 = -64,
-        lat2 = 40
+        lng1 = -96,
+        lat1 = 24,
+        lng2 = -74,
+        lat2 = 38
       ) |>
       
       addPolygons(
@@ -203,6 +206,41 @@ server <- function(input, output, session) {
         group = "Superfog Risk",
         maxBytes = 50 * 1024 * 1024
       ) |>
+      
+      addControl(
+        html = HTML('
+        <button id="reset_map_view" 
+          style="
+            background:white;
+            border:2px solid rgba(0,0,0,0.2);
+            border-radius:4px;
+            padding:6px 10px;
+            font-size:13px;
+            font-weight:600;
+            cursor:pointer;
+            box-shadow:0 1px 4px rgba(0,0,0,0.3);
+          ">
+          Reset Map View
+        </button>
+      '),
+        position = "topright"
+      ) |>
+      htmlwidgets::onRender("
+        function(el, x) {
+          var map = this;
+          setTimeout(function() {
+            var btn = document.getElementById('reset_map_view');
+            if (btn) {
+              btn.onclick = function() {
+                map.fitBounds([
+                  [24, -96],
+                  [38, -74]
+                ]);
+              };
+            }
+          }, 100);
+        }
+      ") |>
       
       addControl(
         html = legend_html,

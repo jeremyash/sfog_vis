@@ -67,20 +67,40 @@ legend_html <- HTML('
 # ----------------------------
 # 3. UI
 # ----------------------------
+addResourcePath("favicon", "www")
 
 ui <- fluidPage(
   titlePanel("USFS Southern Area Superfog Risk"),
   
   tags$head(
-    tags$link(rel = "icon", type = "image/svg+xml", href = "superfog-favicon.svg?v=1"),
-    tags$link(rel = "icon", type = "image/png", sizes = "512x512", href = "superfog-favicon-512x512.png?v=1"),
-    tags$link(rel = "icon", type = "image/png", sizes = "192x192", href = "android-chrome-192x192.png?v=1"),
-    tags$link(rel = "icon", type = "image/png", sizes = "32x32", href = "favicon-32x32.png?v=1"),
-    tags$link(rel = "icon", type = "image/png", sizes = "16x16", href = "favicon-16x16.png?v=1"),
-    tags$link(rel = "shortcut icon", href = "favicon.ico?v=1"),
-    tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "apple-touch-icon.png?v=1")
-  ),
-  
+    tags$link(
+      rel = "icon",
+      type = "image/x-icon",
+      href = "favicon/favicon.ico?v=8"
+    ),
+    tags$link(
+      rel = "shortcut icon",
+      type = "image/x-icon",
+      href = "favicon/favicon.ico?v=8"
+    ),
+    tags$link(
+      rel = "icon",
+      type = "image/png",
+      sizes = "32x32",
+      href = "favicon/favicon-32x32.png?v=8"
+    ),
+    tags$link(
+      rel = "icon",
+      type = "image/png",
+      sizes = "16x16",
+      href = "favicon/favicon-16x16.png?v=8"
+    ),
+    tags$link(
+      rel = "apple-touch-icon",
+      sizes = "180x180",
+      href = "favicon/apple-touch-icon.png?v=8"
+    )
+  ), 
   sidebarLayout(
     sidebarPanel(
       fluidRow(
@@ -193,18 +213,32 @@ server <- function(input, output, session) {
   })
   
   output$sfog_map <- renderLeaflet({
-    leaflet() |>
-      addProviderTiles(providers$CartoDB.Voyager) |>
-      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
-      addPolygons(
-        data = r8_forests_sf,
-        color = "darkgreen",
-        weight = 1.2,
-        opacity = 0.8,
-        fillColor = "darkgreen",
-        fillOpacity = 0.15,
-        group = "Region 8 Forests"
+    leaflet(options = leafletOptions(preferCanvas = TRUE)) |>
+      
+      addMapPane("basePane", zIndex = 200) |>
+      addMapPane("rasterPane", zIndex = 450) |>
+      addMapPane("forestPane", zIndex = 500) |>
+      
+      addProviderTiles(
+        providers$CartoDB.Voyager,
+        group = "Street",
+        options = providerTileOptions(pane = "basePane")
       ) |>
+      
+      addProviderTiles(
+        providers$Esri.WorldImagery,
+        group = "Terrain",
+        options = providerTileOptions(pane = "basePane")
+      ) |>
+      
+      addLayersControl(
+        position = "topleft",
+        baseGroups = c("Street", "Terrain"),
+        options = layersControlOptions(collapsed = TRUE)
+      ) |>
+      
+      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
+      
       addRasterImage(
         sfog_ll[[1]],
         colors = pal,
@@ -212,8 +246,21 @@ server <- function(input, output, session) {
         project = TRUE,
         method = "ngb",
         group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
+        maxBytes = 50 * 1024 * 1024,
+        options = leafletOptions(pane = "rasterPane")
       ) |>
+      
+      addPolygons(
+        data = r8_forests_sf,
+        color = "darkgreen",
+        weight = 1.2,
+        opacity = 0.8,
+        fillColor = "darkgreen",
+        fillOpacity = 0.15,
+        group = "Region 8 Forests",
+        options = pathOptions(pane = "forestPane")
+      ) |>
+      
       addControl(html = legend_html, position = "bottomright")
   })
   
@@ -227,7 +274,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$hour, {
     leafletProxy("sfog_map") |>
-      clearImages() |>
+      clearGroup("Superfog Risk") |>
       addRasterImage(
         sfog_ll[[input$hour]],
         colors = pal,
@@ -235,7 +282,8 @@ server <- function(input, output, session) {
         project = TRUE,
         method = "ngb",
         group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
+        maxBytes = 50 * 1024 * 1024,
+        options = leafletOptions(pane = "rasterPane")
       )
   }, ignoreInit = TRUE)
   

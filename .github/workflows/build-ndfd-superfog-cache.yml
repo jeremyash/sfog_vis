@@ -49,6 +49,7 @@ jobs:
             any::sf
             any::lubridate
             any::raster
+            any::leaflet
 
       - name: Build cache
         run: |

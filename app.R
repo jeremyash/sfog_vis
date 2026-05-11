@@ -17,26 +17,17 @@ download.file(cache_url, cache_file, mode = "wb")
 
 cache <- readRDS(cache_file)
 
-# Analytical raster used for point/click extraction
 sfog_ll <- terra::unwrap(cache$sfog_ll)
-
-# Leaflet-projected raster used for map display
-# This should be created in build_ndfd_superfog_cache.R with:
-# leaflet::projectRasterForLeaflet(...), one layer at a time
 sfog_leaflet_proj <- cache$sfog_leaflet_proj
-
 r8_forests_sf <- cache$r8_forests_sf
 last_refresh <- cache$last_refresh
 
-# Use the original raster names as the valid-time labels.
-# These were working before and should be set in the cache build script.
 layer_labels <- names(sfog_ll)
 
 if (is.null(layer_labels) || any(is.na(layer_labels)) || any(layer_labels == "")) {
   layer_labels <- paste("Forecast hour", seq_len(terra::nlyr(sfog_ll)))
 }
 
-# Number of forecast/display layers
 n_layers <- terra::nlyr(sfog_ll)
 
 # ----------------------------
@@ -44,24 +35,14 @@ n_layers <- terra::nlyr(sfog_ll)
 # ----------------------------
 
 parse_time_safe <- function(x, tz = "UTC") {
-  if (inherits(x, "POSIXct") || inherits(x, "POSIXt")) {
-    return(x)
-  }
+  if (inherits(x, "POSIXct") || inherits(x, "POSIXt")) return(x)
   
   x_chr <- as.character(x)
   
-  parsed <- suppressWarnings(as.POSIXct(
-    x_chr,
-    tz = tz,
-    format = "%Y-%m-%d %H:%M:%S"
-  ))
+  parsed <- suppressWarnings(as.POSIXct(x_chr, tz = tz, format = "%Y-%m-%d %H:%M:%S"))
   
   if (all(is.na(parsed))) {
-    parsed <- suppressWarnings(as.POSIXct(
-      x_chr,
-      tz = tz,
-      format = "%Y-%m-%d %H:%M"
-    ))
+    parsed <- suppressWarnings(as.POSIXct(x_chr, tz = tz, format = "%Y-%m-%d %H:%M"))
   }
   
   if (all(is.na(parsed))) {
@@ -78,9 +59,7 @@ format_time_et <- function(x, fallback = NULL) {
   t <- parse_time_safe(x, tz = "UTC")
   
   if (length(t) == 0 || is.na(t[1])) {
-    if (!is.null(fallback)) {
-      return(as.character(fallback))
-    }
+    if (!is.null(fallback)) return(as.character(fallback))
     return(as.character(x))
   }
   
@@ -210,6 +189,7 @@ ui <- fluidPage(
 server <- function(input, output, session) {
   
   selected_point <- reactiveVal(NULL)
+  map_layers_added <- reactiveVal(FALSE)
   
   output$valid_time <- renderText({
     req(input$hour)
@@ -217,16 +197,30 @@ server <- function(input, output, session) {
   })
   
   output$last_refresh <- renderText({
-    paste(
-      "Last updated:",
-      format_time_et(last_refresh, fallback = last_refresh)
-    )
+    paste("Last updated:", format_time_et(last_refresh, fallback = last_refresh))
   })
   
+  # Render basemap first so app appears faster.
   output$sfog_map <- renderLeaflet({
     leaflet() |>
       addProviderTiles(providers$CartoDB.Voyager) |>
-      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
+      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
+  })
+  
+  # Add heavier layers only after map initializes.
+  observeEvent(input$sfog_map_bounds, {
+    req(!map_layers_added())
+    
+    leafletProxy("sfog_map") |>
+      addRasterImage(
+        sfog_leaflet_proj[[input$hour]],
+        colors = pal,
+        opacity = 0.7,
+        project = FALSE,
+        method = "ngb",
+        group = "Superfog Risk",
+        maxBytes = 50 * 1024 * 1024
+      ) |>
       addPolygons(
         data = r8_forests_sf,
         color = "darkgreen",
@@ -236,20 +230,18 @@ server <- function(input, output, session) {
         fillOpacity = 0.15,
         group = "Region 8 Forests"
       ) |>
-      addRasterImage(
-        sfog_leaflet_proj[[1]],
-        colors = pal,
-        opacity = 0.7,
-        project = FALSE,
-        method = "ngb",
-        group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
-      ) |>
-      addControl(html = legend_html, position = "bottomright")
-  })
+      addControl(
+        html = legend_html,
+        position = "bottomright",
+        layerId = "sfog_legend"
+      )
+    
+    map_layers_added(TRUE)
+  }, ignoreInit = FALSE)
   
   observeEvent(input$hour, {
     req(input$hour)
+    req(map_layers_added())
     
     leafletProxy("sfog_map") |>
       clearGroup("Superfog Risk") |>

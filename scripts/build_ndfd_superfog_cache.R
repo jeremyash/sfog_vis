@@ -1,10 +1,14 @@
- ## Data for superfog visualization: https://vlab.noaa.gov/web/mdl/ndfd
+## Data for superfog visualization: https://vlab.noaa.gov/web/mdl/ndfd
 
 library(terra)
 library(sf)
 library(lubridate)
-library(png)
-library(openssl)
+library(raster)
+library(leaflet)
+
+# ----------------------------
+# 1. Region 8 spatial data
+# ----------------------------
 
 r8_outline <- st_read(
   "r8_outline.gpkg",
@@ -17,6 +21,10 @@ r8_outline_v  <- terra::vect(r8_outline_sf)
 
 r8_forests <- st_read("r8_forests", quiet = TRUE)
 r8_forests_sf <- sf::st_transform(r8_forests, 4326)
+
+# ----------------------------
+# 2. NDFD data download/read
+# ----------------------------
 
 base_url <- "https://tgftp.nws.noaa.gov/SL.us008001/ST.opnl/DF.gr2/DC.ndfd"
 
@@ -45,12 +53,9 @@ download_ndfd <- function(file) {
   out
 }
 
-
 read_variable_conus <- function(file, convert_fun = NULL) {
   path <- download_ndfd(file)
   out <- terra::rast(path)
-  
-  # terra::crs(out) <- ndfd_conus_crs
   
   if (!is.null(convert_fun)) {
     out <- convert_fun(out)
@@ -58,6 +63,10 @@ read_variable_conus <- function(file, convert_fun = NULL) {
   
   out
 }
+
+# ----------------------------
+# 3. Superfog classification
+# ----------------------------
 
 classify_superfog_score <- function(temp, rh, wind, sky) {
   temp_critical <- temp <= 55
@@ -109,27 +118,15 @@ r_rh   <- r_rh[[1:n]]
 r_wind <- r_wind[[1:n]]
 r_sky  <- r_sky[[1:n]]
 
-
 valid_times <- terra::time(r_temp)
 
-# if (is.null(valid_times) || all(is.na(valid_times))) {
-#   valid_times <- seq(
-#     from = lubridate::floor_date(Sys.time(), "hour"),
-#     by = "1 hour",
-#     length.out = n
-#   )
-# }
-risk_colors <- c(
-  "0" = "#F2F2F2",
-  "1" = "#D9EAF7",
-  "2" = "#A9D3EA",
-  "3" = "#58AFDD",
-  "4" = "#FFDA00",
-  "5" = "#FFB000",
-  "6" = "#FF7A00",
-  "7" = "#E64B00",
-  "8" = "#CA0020"
-)
+if (is.null(valid_times) || all(is.na(valid_times))) {
+  valid_times <- seq(
+    from = lubridate::floor_date(Sys.time(), "hour"),
+    by = "1 hour",
+    length.out = n
+  )
+}
 
 sfog <- classify_superfog_score(
   temp = r_temp,
@@ -138,124 +135,64 @@ sfog <- classify_superfog_score(
   sky  = r_sky
 )
 
-# Analytical raster for point extraction
+# ----------------------------
+# 4. Analytical raster for point extraction
+# ----------------------------
+
 sfog_ll <- terra::project(sfog, "EPSG:4326", method = "near")
 sfog_ll <- terra::crop(sfog_ll, r8_outline_v)
 sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
 
-# Display raster for Leaflet PNG overlay
-sfog_3857 <- terra::project(
-  sfog_ll,
-  "EPSG:3857",
-  method = "near"
-)
-
-if (exists("valid_times") && length(valid_times) == terra::nlyr(sfog_ll)) {
+if (length(valid_times) == terra::nlyr(sfog_ll)) {
   names(sfog_ll) <- as.character(valid_times)
 } else if (is.null(names(sfog_ll)) || any(names(sfog_ll) == "")) {
   names(sfog_ll) <- paste0("forecast_hour_", seq_len(terra::nlyr(sfog_ll)))
 }
 
-# -------------------------------------------------------------------------
-# Build PNG overlays for fast Leaflet display
-# -------------------------------------------------------------------------
+# ----------------------------
+# 5. Leaflet-projected display raster
+# ----------------------------
+# This replaces the failed manual PNG/Web Mercator attempt.
+# The live app can display this with addRasterImage(project = FALSE).
+# sfog_ll remains the source of truth for terra::extract().
 
 cache_dir <- "cache"
-png_dir <- file.path(cache_dir, "sfog_pngs")
-
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
-dir.create(png_dir, showWarnings = FALSE, recursive = TRUE)
 
-# Update this if your repo/path changes.
-png_base_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/sfog_pngs"
+sfog_ll_tif <- tempfile(fileext = ".tif")
 
-e <- terra::ext(sfog_3857)
-
-corner_pts_3857 <- terra::vect(
-  data.frame(
-    x = c(terra::xmin(e), terra::xmax(e)),
-    y = c(terra::ymin(e), terra::ymax(e))
-  ),
-  geom = c("x", "y"),
-  crs = "EPSG:3857"
+terra::writeRaster(
+  sfog_ll,
+  sfog_ll_tif,
+  overwrite = TRUE
 )
 
-corner_pts_ll <- terra::project(corner_pts_3857, "EPSG:4326")
-corner_xy <- terra::crds(corner_pts_ll)
+sfog_raster <- raster::brick(sfog_ll_tif)
 
-sfog_bounds <- list(
-  lng1 = corner_xy[1, 1],
-  lat1 = corner_xy[1, 2],
-  lng2 = corner_xy[2, 1],
-  lat2 = corner_xy[2, 2]
+sfog_leaflet_proj <- leaflet::projectRasterForLeaflet(
+  sfog_raster,
+  method = "ngb"
 )
 
-write_sfog_png <- function(r, filename, risk_colors) {
-  vals <- terra::as.matrix(r, wide = TRUE)
-  
-  vals_chr <- as.character(round(vals))
-  vals_chr[is.na(vals)] <- NA_character_
-  
-  hex <- risk_colors[vals_chr]
-  hex[is.na(hex)] <- "#00000000"
-  
-  rgba <- grDevices::col2rgb(hex, alpha = TRUE) / 255
-  
-  arr <- array(
-    data = as.numeric(rgba),
-    dim = c(4, nrow(vals), ncol(vals))
-  )
-  
-  arr <- aperm(arr, c(2, 3, 1))
-  
-  # If the overlay appears vertically flipped in Leaflet, change this to TRUE.
-  flip_y <- FALSE
-  if (flip_y) {
-    arr <- arr[nrow(arr):1, , , drop = FALSE]
-  }
-  
-  png::writePNG(arr, target = filename)
-  invisible(filename)
-}
+names(sfog_leaflet_proj) <- names(sfog_ll)
 
-sfog_png_files <- character(terra::nlyr(sfog_ll))
-
-for (i in seq_len(terra::nlyr(sfog_ll))) {
-  png_name <- sprintf("sfog_%03d.png", i)
-  png_path <- file.path(png_dir, png_name)
-  
-  write_sfog_png(
-    r = sfog_3857[[i]],
-    filename = png_path,
-    risk_colors = risk_colors
-  )
-  
-  sfog_png_files[[i]] <- png_name
-}
-
-sfog_png_data <- vapply(
-  file.path(png_dir, sfog_png_files),
-  function(path) {
-    mime <- "image/png"
-    b64 <- openssl::base64_encode(readBin(path, "raw", file.info(path)$size))
-    paste0("data:", mime, ";base64,", b64)
-  },
-  character(1)
-)
+# ----------------------------
+# 6. Save cache
+# ----------------------------
 
 cache <- list(
-  sfog_ll = terra::wrap(sfog_ll),
-  sfog_png_data = sfog_png_data,
-  sfog_bounds = sfog_bounds,
+  sfog_ll = terra::wrap(sfog_ll),                 # analytical source for point extraction
+  sfog_leaflet_proj = sfog_leaflet_proj,          # display source for addRasterImage(project = FALSE)
   r8_forests_sf = r8_forests_sf,
-  valid_times = if (exists("valid_times")) valid_times else names(sfog_ll),
+  valid_times = valid_times,
   last_refresh = Sys.time()
 )
 
 saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))
 
 message("Saved cache to: ", file.path(cache_dir, "ndfd_superfog_cache.rds"))
-message("Saved PNG overlays to: ", png_dir)
-message("PNG count: ", length(sfog_png_data))
+message("Analytical raster layers: ", terra::nlyr(sfog_ll))
+message("Leaflet display raster layers: ", raster::nlayers(sfog_leaflet_proj))
+message("Last refresh: ", as.character(cache$last_refresh))

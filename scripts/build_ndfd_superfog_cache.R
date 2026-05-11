@@ -138,12 +138,19 @@ sfog <- classify_superfog_score(
   sky  = r_sky
 )
 
-# Analytical raster: still used for point/click extraction.
+# Analytical raster for point extraction
 sfog_ll <- terra::project(sfog, "EPSG:4326", method = "near")
 sfog_ll <- terra::crop(sfog_ll, r8_outline_v)
 sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
+
+# Display raster for Leaflet PNG overlay
+sfog_3857 <- terra::project(
+  sfog_ll,
+  "EPSG:3857",
+  method = "near"
+)
 
 if (exists("valid_times") && length(valid_times) == terra::nlyr(sfog_ll)) {
   names(sfog_ll) <- as.character(valid_times)
@@ -164,13 +171,25 @@ dir.create(png_dir, showWarnings = FALSE, recursive = TRUE)
 # Update this if your repo/path changes.
 png_base_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/sfog_pngs"
 
-e <- terra::ext(sfog_ll)
+e <- terra::ext(sfog_3857)
+
+corner_pts_3857 <- terra::vect(
+  data.frame(
+    x = c(terra::xmin(e), terra::xmax(e)),
+    y = c(terra::ymin(e), terra::ymax(e))
+  ),
+  geom = c("x", "y"),
+  crs = "EPSG:3857"
+)
+
+corner_pts_ll <- terra::project(corner_pts_3857, "EPSG:4326")
+corner_xy <- terra::crds(corner_pts_ll)
 
 sfog_bounds <- list(
-  lng1 = terra::xmin(e),
-  lat1 = terra::ymin(e),
-  lng2 = terra::xmax(e),
-  lat2 = terra::ymax(e)
+  lng1 = corner_xy[1, 1],
+  lat1 = corner_xy[1, 2],
+  lng2 = corner_xy[2, 1],
+  lat2 = corner_xy[2, 2]
 )
 
 write_sfog_png <- function(r, filename, risk_colors) {
@@ -208,7 +227,7 @@ for (i in seq_len(terra::nlyr(sfog_ll))) {
   png_path <- file.path(png_dir, png_name)
   
   write_sfog_png(
-    r = sfog_ll[[i]],
+    r = sfog_3857[[i]],
     filename = png_path,
     risk_colors = risk_colors
   )

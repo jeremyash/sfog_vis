@@ -110,13 +110,13 @@ r_sky  <- r_sky[[1:n]]
 
 valid_times <- terra::time(r_temp)
 
-if (is.null(valid_times) || all(is.na(valid_times))) {
-  valid_times <- seq(
-    from = lubridate::floor_date(Sys.time(), "hour"),
-    by = "1 hour",
-    length.out = n
-  )
-}
+# if (is.null(valid_times) || all(is.na(valid_times))) {
+#   valid_times <- seq(
+#     from = lubridate::floor_date(Sys.time(), "hour"),
+#     by = "1 hour",
+#     length.out = n
+#   )
+# }
 
 sfog <- classify_superfog_score(r_temp, r_rh, r_wind, r_sky)
 names(sfog) <- format(valid_times, "%Y-%m-%d %H:%M")

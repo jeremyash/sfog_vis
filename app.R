@@ -8,7 +8,7 @@ library(terra)
 library(sf)
 library(htmltools)
 library(lubridate)
-library(htmlwidgets)
+library(raster)
 
 cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
@@ -16,19 +16,82 @@ cache_file <- tempfile(fileext = ".rds")
 download.file(cache_url, cache_file, mode = "wb")
 
 cache <- readRDS(cache_file)
-# cache <- readRDS("cache/ndfd_superfog_cache.rds")
 
+# Analytical raster used for point/click extraction
 sfog_ll <- terra::unwrap(cache$sfog_ll)
+
+# Leaflet-projected raster used for map display
+# This should be created in build_ndfd_superfog_cache.R with:
+# leaflet::projectRasterForLeaflet(...), one layer at a time
+sfog_leaflet_proj <- cache$sfog_leaflet_proj
+
 r8_forests_sf <- cache$r8_forests_sf
-layer_labels <- names(sfog_ll)
 last_refresh <- cache$last_refresh
 
-if (is.null(layer_labels) || any(layer_labels == "")) {
+# Use the original raster names as the valid-time labels.
+# These were working before and should be set in the cache build script.
+layer_labels <- names(sfog_ll)
+
+if (is.null(layer_labels) || any(is.na(layer_labels)) || any(layer_labels == "")) {
   layer_labels <- paste("Forecast hour", seq_len(terra::nlyr(sfog_ll)))
 }
 
+# Number of forecast/display layers
+n_layers <- terra::nlyr(sfog_ll)
+
 # ----------------------------
-# 2. Plotting objects
+# 2. Time helpers
+# ----------------------------
+
+parse_time_safe <- function(x, tz = "UTC") {
+  if (inherits(x, "POSIXct") || inherits(x, "POSIXt")) {
+    return(x)
+  }
+  
+  x_chr <- as.character(x)
+  
+  parsed <- suppressWarnings(as.POSIXct(
+    x_chr,
+    tz = tz,
+    format = "%Y-%m-%d %H:%M:%S"
+  ))
+  
+  if (all(is.na(parsed))) {
+    parsed <- suppressWarnings(as.POSIXct(
+      x_chr,
+      tz = tz,
+      format = "%Y-%m-%d %H:%M"
+    ))
+  }
+  
+  if (all(is.na(parsed))) {
+    parsed <- suppressWarnings(lubridate::ymd_hms(
+      gsub(" UTC$| EST$| EDT$", "", x_chr),
+      tz = tz
+    ))
+  }
+  
+  parsed
+}
+
+format_time_et <- function(x, fallback = NULL) {
+  t <- parse_time_safe(x, tz = "UTC")
+  
+  if (length(t) == 0 || is.na(t[1])) {
+    if (!is.null(fallback)) {
+      return(as.character(fallback))
+    }
+    return(as.character(x))
+  }
+  
+  format(
+    lubridate::with_tz(t[1], "America/New_York"),
+    "%b %d, %Y %I:%M %p ET"
+  )
+}
+
+# ----------------------------
+# 3. Plotting objects
 # ----------------------------
 
 risk_colors <- c(
@@ -65,67 +128,34 @@ legend_html <- HTML('
 ')
 
 # ----------------------------
-# 3. UI
+# 4. UI
 # ----------------------------
+
 addResourcePath("favicon", "www")
 
 ui <- fluidPage(
   titlePanel("USFS Southern Area Superfog Risk"),
   
   tags$head(
-    tags$link(
-      rel = "icon",
-      type = "image/x-icon",
-      href = "favicon/favicon.ico?v=8"
-    ),
-    tags$link(
-      rel = "shortcut icon",
-      type = "image/x-icon",
-      href = "favicon/favicon.ico?v=8"
-    ),
-    tags$link(
-      rel = "icon",
-      type = "image/png",
-      sizes = "32x32",
-      href = "favicon/favicon-32x32.png?v=8"
-    ),
-    tags$link(
-      rel = "icon",
-      type = "image/png",
-      sizes = "16x16",
-      href = "favicon/favicon-16x16.png?v=8"
-    ),
-    tags$link(
-      rel = "apple-touch-icon",
-      sizes = "180x180",
-      href = "favicon/apple-touch-icon.png?v=8"
-    )
-  ), 
+    tags$link(rel = "icon", type = "image/x-icon", href = "favicon/favicon.ico?v=8"),
+    tags$link(rel = "shortcut icon", type = "image/x-icon", href = "favicon/favicon.ico?v=8"),
+    tags$link(rel = "icon", type = "image/png", sizes = "32x32", href = "favicon/favicon-32x32.png?v=8"),
+    tags$link(rel = "icon", type = "image/png", sizes = "16x16", href = "favicon/favicon-16x16.png?v=8"),
+    tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "favicon/apple-touch-icon.png?v=8")
+  ),
+  
   sidebarLayout(
     sidebarPanel(
       fluidRow(
-        column(
-          width = 2,
-          actionButton("prev_hour", label = NULL, icon = icon("chevron-left"), width = "100%")
-        ),
+        column(width = 2, actionButton("prev_hour", label = NULL, icon = icon("chevron-left"), width = "100%")),
         column(
           width = 8,
           div(
-            style = "
-              display:flex;
-              align-items:center;
-              justify-content:center;
-              height:38px;
-              font-weight:bold;
-              font-size:22px;
-            ",
+            style = "display:flex; align-items:center; justify-content:center; height:38px; font-weight:bold; font-size:22px;",
             textOutput("valid_time")
           )
         ),
-        column(
-          width = 2,
-          actionButton("next_hour", label = NULL, icon = icon("chevron-right"), width = "100%")
-        )
+        column(width = 2, actionButton("next_hour", label = NULL, icon = icon("chevron-right"), width = "100%"))
       ),
       
       br(),
@@ -134,7 +164,7 @@ ui <- fluidPage(
         inputId = "hour",
         label = NULL,
         min = 1,
-        max = terra::nlyr(sfog_ll),
+        max = n_layers,
         value = 1,
         step = 1,
         animate = animationOptions(interval = 900, loop = TRUE)
@@ -142,10 +172,7 @@ ui <- fluidPage(
       
       br(),
       
-      div(
-        style = "font-size:12px; color:#555; text-align:center;",
-        textOutput("last_refresh")
-      ),
+      div(style = "font-size:12px; color:#555; text-align:center;", textOutput("last_refresh")),
       
       hr(),
       
@@ -165,20 +192,7 @@ ui <- fluidPage(
         actionButton(
           "reset_map_view",
           "Reset Map View",
-          style = "
-            position:absolute;
-            top:10px;
-            right:10px;
-            z-index:1000;
-            background:white;
-            border:2px solid rgba(0,0,0,0.2);
-            border-radius:4px;
-            padding:6px 10px;
-            font-size:13px;
-            font-weight:600;
-            cursor:pointer;
-            box-shadow:0 1px 4px rgba(0,0,0,0.3);
-          "
+          style = "position:absolute; top:10px; right:10px; z-index:1000; background:white; border:2px solid rgba(0,0,0,0.2); border-radius:4px; padding:6px 10px; font-size:13px; font-weight:600; cursor:pointer; box-shadow:0 1px 4px rgba(0,0,0,0.3);"
         ),
         
         leafletOutput("sfog_map", height = "650px")
@@ -190,7 +204,7 @@ ui <- fluidPage(
 )
 
 # ----------------------------
-# 4. Server
+# 5. Server
 # ----------------------------
 
 server <- function(input, output, session) {
@@ -198,26 +212,21 @@ server <- function(input, output, session) {
   selected_point <- reactiveVal(NULL)
   
   output$valid_time <- renderText({
-    t <- as.POSIXct(layer_labels[input$hour], tz = "UTC")
-    format(lubridate::with_tz(t, "America/New_York"), "%b %d, %Y %I:%M %p ET")
+    req(input$hour)
+    format_time_et(layer_labels[input$hour], fallback = layer_labels[input$hour])
   })
   
   output$last_refresh <- renderText({
     paste(
       "Last updated:",
-      format(
-        lubridate::with_tz(last_refresh, "America/New_York"),
-        "%b %d, %Y %I:%M %p ET"
-      )
+      format_time_et(last_refresh, fallback = last_refresh)
     )
   })
   
   output$sfog_map <- renderLeaflet({
     leaflet() |>
       addProviderTiles(providers$CartoDB.Voyager) |>
-      
       fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
-      
       addPolygons(
         data = r8_forests_sf,
         color = "darkgreen",
@@ -227,41 +236,41 @@ server <- function(input, output, session) {
         fillOpacity = 0.15,
         group = "Region 8 Forests"
       ) |>
-      
       addRasterImage(
-        sfog_ll[[1]],
+        sfog_leaflet_proj[[1]],
         colors = pal,
         opacity = 0.7,
-        project = TRUE,
+        project = FALSE,
         method = "ngb",
         group = "Superfog Risk",
         maxBytes = 50 * 1024 * 1024
       ) |>
-      
       addControl(html = legend_html, position = "bottomright")
   })
+  
+  observeEvent(input$hour, {
+    req(input$hour)
+    
+    leafletProxy("sfog_map") |>
+      clearGroup("Superfog Risk") |>
+      addRasterImage(
+        sfog_leaflet_proj[[input$hour]],
+        colors = pal,
+        opacity = 0.7,
+        project = FALSE,
+        method = "ngb",
+        group = "Superfog Risk",
+        maxBytes = 50 * 1024 * 1024
+      )
+  }, ignoreInit = TRUE)
   
   observeEvent(input$prev_hour, {
     updateSliderInput(session, "hour", value = max(1, input$hour - 1))
   })
   
   observeEvent(input$next_hour, {
-    updateSliderInput(session, "hour", value = min(terra::nlyr(sfog_ll), input$hour + 1))
+    updateSliderInput(session, "hour", value = min(n_layers, input$hour + 1))
   })
-  
-  observeEvent(input$hour, {
-    leafletProxy("sfog_map") |>
-      clearGroup("Superfog Risk") |>
-      addRasterImage(
-        sfog_ll[[input$hour]],
-        colors = pal,
-        opacity = 0.7,
-        project = TRUE,
-        method = "ngb",
-        group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
-      )
-  }, ignoreInit = TRUE)
   
   observeEvent(input$reset_map_view, {
     selected_point(NULL)
@@ -271,23 +280,14 @@ server <- function(input, output, session) {
     
     leafletProxy("sfog_map") |>
       clearGroup("Point Query") |>
-      fitBounds(
-        lng1 = -96,
-        lat1 = 24,
-        lng2 = -74,
-        lat2 = 38
-      )
+      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
   })
   
   observeEvent(input$extract_point, {
     lat <- as.numeric(input$query_lat)
     lon <- as.numeric(input$query_lon)
     
-    selected_point(list(
-      lat = lat,
-      lon = lon,
-      source = "manual"
-    ))
+    selected_point(list(lat = lat, lon = lon, source = "manual"))
   })
   
   observeEvent(input$sfog_map_click, {
@@ -297,11 +297,7 @@ server <- function(input, output, session) {
     updateTextInput(session, "query_lat", value = round(lat, 5))
     updateTextInput(session, "query_lon", value = round(lon, 5))
     
-    selected_point(list(
-      lat = lat,
-      lon = lon,
-      source = "map"
-    ))
+    selected_point(list(lat = lat, lon = lon, source = "map"))
   })
   
   point_risk <- reactive({
@@ -317,20 +313,10 @@ server <- function(input, output, session) {
     )
     
     pt <- data.frame(lon = lon, lat = lat)
+    pt_v <- terra::vect(pt, geom = c("lon", "lat"), crs = "EPSG:4326")
     
-    pt_v <- terra::vect(
-      pt,
-      geom = c("lon", "lat"),
-      crs = "EPSG:4326"
-    )
-    
-    inside_domain <- !is.na(
-      terra::extract(sfog_ll[[1]], pt_v)[1, 2]
-    )
-    
-    validate(
-      need(inside_domain, "Location is outside of the Southern Area.")
-    )
+    inside_domain <- !is.na(terra::extract(sfog_ll[[1]], pt_v)[1, 2])
+    validate(need(inside_domain, "Location is outside of the Southern Area."))
     
     vals <- terra::extract(sfog_ll, pt_v)
     risk_vals <- as.numeric(vals[1, -1])
@@ -343,18 +329,9 @@ server <- function(input, output, session) {
         group = "Point Query",
         label = paste0("Point Query: ", round(lat, 4), ", ", round(lon, 4))
       ) |>
-      fitBounds(
-        lng1 = lon - 0.5,
-        lat1 = lat - 0.5,
-        lng2 = lon + 0.5,
-        lat2 = lat + 0.5
-      )
+      fitBounds(lng1 = lon - 0.5, lat1 = lat - 0.5, lng2 = lon + 0.5, lat2 = lat + 0.5)
     
-    times_utc <- as.POSIXct(
-      names(sfog_ll),
-      tz = "UTC",
-      format = "%Y-%m-%d %H:%M"
-    )
+    times_utc <- parse_time_safe(layer_labels, tz = "UTC")
     
     data.frame(
       time_utc = times_utc,
@@ -367,7 +344,6 @@ server <- function(input, output, session) {
   
   output$point_risk_plot <- renderPlot({
     df <- point_risk()
-    
     point_cols <- risk_colors[as.character(df$risk)]
     
     par(mar = c(6, 4, 4, 6) + 0.1, xpd = TRUE)
@@ -382,59 +358,22 @@ server <- function(input, output, session) {
       xaxt = "n",
       xlab = "Valid time",
       ylab = "Superfog Risk",
-      main = paste0(
-        "Superfog Risk at ",
-        round(df$lat[1], 4),
-        ", ",
-        round(df$lon[1], 4)
-      )
+      main = paste0("Superfog Risk at ", round(df$lat[1], 4), ", ", round(df$lon[1], 4))
     )
     
-    points(
-      df$time_et,
-      df$risk,
-      pch = 21,
-      bg = point_cols,
-      col = "#333333",
-      cex = 2.1,
-      lwd = 1.2
-    )
+    points(df$time_et, df$risk, pch = 21, bg = point_cols, col = "#333333", cex = 2.1, lwd = 1.2)
     
-    axis.POSIXct(
-      side = 1,
-      x = df$time_et,
-      format = "%m/%d\n%H:%M",
-      las = 2
-    )
+    axis.POSIXct(side = 1, x = df$time_et, format = "%m/%d\n%H:%M", las = 2)
     
     par(xpd = FALSE)
-    
     abline(h = 4, lty = 2, col = "#FFDA00", lwd = 2)
     abline(h = 8, lty = 2, col = "#CA0020", lwd = 2)
     
     par(xpd = NA)
-    
     usr <- par("usr")
     
-    text(
-      x = usr[2] + 0.008 * diff(usr[1:2]),
-      y = 4,
-      labels = "Watchout",
-      pos = 4,
-      col = "#B38F00",
-      cex = 1.15,
-      font = 2
-    )
-    
-    text(
-      x = usr[2] + 0.008 * diff(usr[1:2]),
-      y = 8,
-      labels = "Critical",
-      pos = 4,
-      col = "#CA0020",
-      cex = 1.15,
-      font = 2
-    )
+    text(x = usr[2] + 0.008 * diff(usr[1:2]), y = 4, labels = "Watchout", pos = 4, col = "#B38F00", cex = 1.15, font = 2)
+    text(x = usr[2] + 0.008 * diff(usr[1:2]), y = 8, labels = "Critical", pos = 4, col = "#CA0020", cex = 1.15, font = 2)
     
     par(xpd = FALSE)
   })

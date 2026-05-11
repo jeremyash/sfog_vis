@@ -213,42 +213,10 @@ server <- function(input, output, session) {
   })
   
   output$sfog_map <- renderLeaflet({
-    leaflet(options = leafletOptions(preferCanvas = TRUE)) |>
-      
-      addMapPane("basePane", zIndex = 200) |>
-      addMapPane("rasterPane", zIndex = 450) |>
-      addMapPane("forestPane", zIndex = 500) |>
-      
-      addProviderTiles(
-        providers$CartoDB.Voyager,
-        group = "Street",
-        options = providerTileOptions(pane = "basePane")
-      ) |>
-      
-      addProviderTiles(
-        providers$Esri.WorldImagery,
-        group = "Terrain",
-        options = providerTileOptions(pane = "basePane")
-      ) |>
-      
-      addLayersControl(
-        position = "topleft",
-        baseGroups = c("Street", "Terrain"),
-        options = layersControlOptions(collapsed = TRUE)
-      ) |>
+    leaflet() |>
+      addProviderTiles(providers$CartoDB.Voyager) |>
       
       fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
-      
-      addRasterImage(
-        sfog_ll[[1]],
-        colors = pal,
-        opacity = 0.7,
-        project = TRUE,
-        method = "ngb",
-        group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024,
-        options = leafletOptions(pane = "rasterPane")
-      ) |>
       
       addPolygons(
         data = r8_forests_sf,
@@ -257,8 +225,17 @@ server <- function(input, output, session) {
         opacity = 0.8,
         fillColor = "darkgreen",
         fillOpacity = 0.15,
-        group = "Region 8 Forests",
-        options = pathOptions(pane = "forestPane")
+        group = "Region 8 Forests"
+      ) |>
+      
+      addRasterImage(
+        sfog_ll[[1]],
+        colors = pal,
+        opacity = 0.7,
+        project = TRUE,
+        method = "ngb",
+        group = "Superfog Risk",
+        maxBytes = 50 * 1024 * 1024
       ) |>
       
       addControl(html = legend_html, position = "bottomright")
@@ -282,8 +259,7 @@ server <- function(input, output, session) {
         project = TRUE,
         method = "ngb",
         group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024,
-        options = leafletOptions(pane = "rasterPane")
+        maxBytes = 50 * 1024 * 1024
       )
   }, ignoreInit = TRUE)
   

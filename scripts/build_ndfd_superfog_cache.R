@@ -145,6 +145,22 @@ sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
 
+# Reclassify to 3-category superfog risk
+sfog_ll <- terra::classify(
+  sfog_ll,
+  rcl = matrix(
+    c(
+      0, 3, 1,  # Minimal
+      4, 6, 2,  # Moderate
+      7, 8, 3   # High
+    ),
+    ncol = 3,
+    byrow = TRUE
+  ),
+  include.lowest = TRUE,
+  right = TRUE
+)
+
 if (length(valid_times) == terra::nlyr(sfog_ll)) {
   names(sfog_ll) <- as.character(valid_times)
 } else if (is.null(names(sfog_ll)) || any(names(sfog_ll) == "")) {

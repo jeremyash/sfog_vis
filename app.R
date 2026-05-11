@@ -72,37 +72,24 @@ format_time_et <- function(x, fallback = NULL) {
 # ----------------------------
 # 3. Plotting objects
 # ----------------------------
-
 risk_colors <- c(
-  "0" = "#F2F2F2",
-  "1" = "#D9EAF7",
-  "2" = "#A9D3EA",
-  "3" = "#58AFDD",
-  "4" = "#FFDA00",
-  "5" = "#FFB000",
-  "6" = "#FF7A00",
-  "7" = "#E64B00",
-  "8" = "#CA0020"
+  "1" = "#58AFDD",  # Minimal
+  "2" = "#FFB000",  # Moderate
+  "3" = "#CA0020"   # High
 )
 
 pal <- leaflet::colorFactor(
   palette = risk_colors,
-  domain = 0:8,
+  levels = c(1, 2, 3),
   na.color = "transparent"
 )
 
 legend_html <- HTML('
 <div style="background:white; padding:10px; border-radius:6px;">
   <div style="font-weight:bold; margin-bottom:6px;">Superfog Risk</div>
-  <div><span style="background:#F2F2F2; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 0</div>
-  <div><span style="background:#D9EAF7; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 1</div>
-  <div><span style="background:#A9D3EA; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 2</div>
-  <div><span style="background:#58AFDD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 3</div>
-  <div><span style="background:#FFDA00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Watchout</div>
-  <div><span style="background:#FFB000; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 5</div>
-  <div><span style="background:#FF7A00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 6</div>
-  <div><span style="background:#E64B00; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> 7</div>
-  <div><span style="background:#CA0020; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Critical</div>
+  <div><span style="background:#58AFDD; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Minimal</div>
+  <div><span style="background:#FFB000; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> Moderate</div>
+  <div><span style="background:#CA0020; width:14px; height:14px; display:inline-block; border:1px solid #777;"></span> High</div>
 </div>
 ')
 
@@ -203,7 +190,7 @@ server <- function(input, output, session) {
   # Render basemap first so app appears faster.
   output$sfog_map <- renderLeaflet({
     leaflet() |>
-      addProviderTiles(providers$CartoDB.Voyager) |>
+      addProviderTiles(providers$OpenStreetMap.Mapnik) |>
       fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
   })
   
@@ -346,7 +333,7 @@ server <- function(input, output, session) {
       type = "l",
       lwd = 2,
       col = "#666666",
-      ylim = c(0, 8.4),
+      ylim = c(1, 3.2),
       xaxt = "n",
       xlab = "Valid time",
       ylab = "Superfog Risk",
@@ -357,17 +344,13 @@ server <- function(input, output, session) {
     
     axis.POSIXct(side = 1, x = df$time_et, format = "%m/%d\n%H:%M", las = 2)
     
-    par(xpd = FALSE)
-    abline(h = 4, lty = 2, col = "#FFDA00", lwd = 2)
-    abline(h = 8, lty = 2, col = "#CA0020", lwd = 2)
+    axis(
+      side = 2,
+      at = c(1, 2, 3),
+      labels = c("Minimal", "Moderate", "High"),
+      las = 1
+    )
     
-    par(xpd = NA)
-    usr <- par("usr")
-    
-    text(x = usr[2] + 0.008 * diff(usr[1:2]), y = 4, labels = "Watchout", pos = 4, col = "#B38F00", cex = 1.15, font = 2)
-    text(x = usr[2] + 0.008 * diff(usr[1:2]), y = 8, labels = "Critical", pos = 4, col = "#CA0020", cex = 1.15, font = 2)
-    
-    par(xpd = FALSE)
   })
 }
 

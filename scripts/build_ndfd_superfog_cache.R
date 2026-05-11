@@ -171,10 +171,12 @@ terra::writeRaster(
 
 sfog_raster <- raster::brick(sfog_ll_tif)
 
-sfog_leaflet_proj <- leaflet::projectRasterForLeaflet(
-  sfog_raster,
-  method = "ngb"
-)
+sfog_leaflet_proj <- raster::stack(lapply(seq_len(raster::nlayers(sfog_raster)), function(i) {
+  leaflet::projectRasterForLeaflet(
+    sfog_raster[[i]],
+    method = "ngb"
+  )
+}))
 
 names(sfog_leaflet_proj) <- names(sfog_ll)
 

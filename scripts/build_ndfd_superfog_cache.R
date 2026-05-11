@@ -4,6 +4,7 @@ library(terra)
 library(sf)
 library(lubridate)
 library(png)
+library(openssl)
 
 r8_outline <- st_read(
   "r8_outline.gpkg",
@@ -215,11 +216,19 @@ for (i in seq_len(terra::nlyr(sfog_ll))) {
   sfog_png_files[[i]] <- png_name
 }
 
-sfog_png_urls <- file.path(png_base_url, sfog_png_files)
+sfog_png_data <- vapply(
+  file.path(png_dir, sfog_png_files),
+  function(path) {
+    mime <- "image/png"
+    b64 <- openssl::base64_encode(readBin(path, "raw", file.info(path)$size))
+    paste0("data:", mime, ";base64,", b64)
+  },
+  character(1)
+)
 
 cache <- list(
   sfog_ll = terra::wrap(sfog_ll),
-  sfog_png_urls = sfog_png_urls,
+  sfog_png_data = sfog_png_data,
   sfog_bounds = sfog_bounds,
   r8_forests_sf = r8_forests_sf,
   valid_times = if (exists("valid_times")) valid_times else names(sfog_ll),

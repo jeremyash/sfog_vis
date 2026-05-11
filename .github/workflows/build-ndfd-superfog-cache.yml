@@ -49,6 +49,7 @@ jobs:
             any::sf
             any::lubridate
             any::png
+            any: openssl
 
       - name: Build cache
         run: |

@@ -1,26 +1,16 @@
-.git
-.gitignore
-.Rproj.user
+.DS_Store
 .Rhistory
 .RData
-.DS_Store
+.Rproj.user
+.git
+.gitignore
 
-cache/
-.secrets/
-text-archive/
 ndfd_region8/
+ndfd_region8/*
+cache/
+cache/*
 
-rsconnect/
-
-*.zip
-*.html
+*.grib2
+*.bin
 *.tif
-*.grd
-*.gri
-*.png
-*.jpg
-*.jpeg
-
-node_modules/
-venv/
-.env/
+*.zip

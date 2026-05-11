@@ -3,6 +3,7 @@
 library(terra)
 library(sf)
 library(lubridate)
+library(png)
 
 r8_outline <- st_read(
   "r8_outline.gpkg",
@@ -127,6 +128,13 @@ risk_colors <- c(
   "6" = "#FF7A00",
   "7" = "#E64B00",
   "8" = "#CA0020"
+)
+
+sfog <- classify_superfog_score(
+  temp = r_temp,
+  rh   = r_rh,
+  wind = r_wind,
+  sky  = r_sky
 )
 
 # Analytical raster: still used for point/click extraction.

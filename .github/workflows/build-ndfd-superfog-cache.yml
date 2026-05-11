@@ -48,8 +48,7 @@ jobs:
             any::terra
             any::sf
             any::lubridate
-            any::png
-            any::openssl
+            any::raster
 
       - name: Build cache
         run: |

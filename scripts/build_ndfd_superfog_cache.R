@@ -189,7 +189,7 @@ cache <- list(
   sfog_leaflet_proj = sfog_leaflet_proj,          # display source for addRasterImage(project = FALSE)
   r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
-  last_refresh = Sys.time()
+  last_refresh = lubridate::with_tz(Sys.time(), "UTC")
 )
 
 saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))

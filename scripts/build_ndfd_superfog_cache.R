@@ -239,4 +239,4 @@ saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))
 
 message("Saved cache to: ", file.path(cache_dir, "ndfd_superfog_cache.rds"))
 message("Saved PNG overlays to: ", png_dir)
-message("PNG count: ", length(sfog_png_urls))
+message("PNG count: ", length(sfog_png_data))

@@ -21,13 +21,6 @@ r8_outline <- st_read(
 r8_outline_sf <- st_transform(r8_outline, 4326)
 r8_outline_v  <- terra::vect(r8_outline_sf)
 
-r8_forests <- st_read("r8_forests", quiet = TRUE)
-r8_forests_sf <- sf::st_transform(r8_forests, 4326)
-r8_forests_sf <- sf::st_simplify(
-  r8_forests_sf,
-  dTolerance = 0.001,
-  preserveTopology = TRUE
-)
 
 # ----------------------------
 # 2. NDFD data download/read
@@ -285,7 +278,6 @@ cache <- list(
   sfog_ll = terra::wrap(sfog_ll),
   sfog_png_data = sfog_png_data,
   sfog_png_bounds = sfog_png_bounds,
-  r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = lubridate::with_tz(Sys.time(), "UTC")
 )

@@ -1,6 +1,3 @@
-t0 <- Sys.time()
-message("START app load")
-
 # ----------------------------
 # 1. Packages and basic data
 # ----------------------------
@@ -11,39 +8,22 @@ library(terra)
 library(sf)
 library(htmltools)
 library(lubridate)
-library(htmlwidgets)
 
 cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
 cache_file <- tempfile(fileext = ".rds")
-message("Downloading cache...")
-t1 <- Sys.time()
 download.file(cache_url, cache_file, mode = "wb")
-message("Download seconds: ", round(as.numeric(Sys.time() - t1, units = "secs"), 2))
 
-message("Reading cache...")
-t1 <- Sys.time()
 cache <- readRDS(cache_file)
-message("readRDS seconds: ", round(as.numeric(Sys.time() - t1, units = "secs"), 2))
 
 # Analytical raster used for point/click extraction
-message("Unwrapping sfog_ll...")
-t1 <- Sys.time()
 sfog_ll <- terra::unwrap(cache$sfog_ll)
-message("unwrap seconds: ", round(as.numeric(Sys.time() - t1, units = "secs"), 2))
 
-
-message("Cache size MB: ", round(file.info(cache_file)$size / 1024^2, 2))
-message("PNG count: ", length(cache$sfog_png_data))
-message("First PNG chars: ", nchar(cache$sfog_png_data[[1]]))
-message("Total app startup seconds: ", round(as.numeric(Sys.time() - t0, units = "secs"), 2))
-
-
-# PNG overlays used for fast map display
-sfog_png_data <- unname(as.list(cache$sfog_png_data))
+# PNG overlay URLs used for fast map display
+sfog_png_urls <- unname(as.list(cache$sfog_png_urls))
 sfog_png_bounds <- cache$sfog_png_bounds
 
-r8_forests_sf <- readRDS("r8_forests_simplified.rds")
+r8_forests_sf <- cache$r8_forests_sf
 last_refresh <- cache$last_refresh
 
 layer_labels <- names(sfog_ll)
@@ -238,22 +218,16 @@ server <- function(input, output, session) {
   })
   
   output$sfog_map <- renderLeaflet({
-    t1 <- Sys.time()
-    
-    m <- leaflet() |>
+    leaflet() |>
       addProviderTiles(providers$OpenStreetMap.Mapnik) |>
       fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
-    
-    message("renderLeaflet base map seconds: ", round(as.numeric(Sys.time() - t1, units = "secs"), 2))
-    
-    m
   })
   
   set_sfog_overlay <- function(hour_index) {
     session$sendCustomMessage(
       type = "sfog_set_overlay",
       message = list(
-        url = sfog_png_data[[hour_index]],
+        url = sfog_png_urls[[hour_index]],
         west = sfog_png_bounds$west,
         south = sfog_png_bounds$south,
         east = sfog_png_bounds$east,
@@ -264,11 +238,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$sfog_map_bounds, {
     req(!map_layers_added())
-    
-    message("Starting initial map layers...")
-    t0 <- Sys.time()
-    
-    t_poly <- Sys.time()
     
     leafletProxy("sfog_map") |>
       addPolygons(
@@ -286,27 +255,8 @@ server <- function(input, output, session) {
         layerId = "sfog_legend"
       )
     
-    message(
-      "addPolygons/addControl seconds: ",
-      round(as.numeric(Sys.time() - t_poly, units = "secs"), 3)
-    )
-    
-    t_png <- Sys.time()
-    
     set_sfog_overlay(input$hour)
-    
-    message(
-      "set_sfog_overlay seconds: ",
-      round(as.numeric(Sys.time() - t_png, units = "secs"), 3)
-    )
-    
     map_layers_added(TRUE)
-    
-    message(
-      "Total observeEvent seconds: ",
-      round(as.numeric(Sys.time() - t0, units = "secs"), 3)
-    )
-    
   }, ignoreInit = FALSE)
   
   observeEvent(input$hour, {

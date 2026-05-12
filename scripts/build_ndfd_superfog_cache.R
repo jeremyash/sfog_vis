@@ -23,6 +23,11 @@ r8_outline_v  <- terra::vect(r8_outline_sf)
 
 r8_forests <- st_read("r8_forests", quiet = TRUE)
 r8_forests_sf <- sf::st_transform(r8_forests, 4326)
+r8_forests_sf <- sf::st_simplify(
+  r8_forests_sf,
+  dTolerance = 0.001,
+  preserveTopology = TRUE
+)
 
 # ----------------------------
 # 2. NDFD data download/read

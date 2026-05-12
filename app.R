@@ -252,9 +252,23 @@ server <- function(input, output, session) {
   })
   
   output$sfog_map <- renderLeaflet({
-    leaflet() |>
+    leaflet(options = leafletOptions(preferCanvas = TRUE)) |>
       addProviderTiles(providers$OpenStreetMap.Mapnik) |>
-      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
+      fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38) |>
+      addPolygons(
+        data = r8_forests_sf,
+        color = "darkgreen",
+        weight = 1.2,
+        opacity = 0.8,
+        fillColor = "darkgreen",
+        fillOpacity = 0.15,
+        group = "Region 8 Forests"
+      ) |>
+      addControl(
+        html = legend_html,
+        position = "bottomright",
+        layerId = "sfog_legend"
+      )
   })
   
   set_sfog_overlay <- function(hour_index) {
@@ -272,22 +286,6 @@ server <- function(input, output, session) {
   
   observeEvent(input$sfog_map_bounds, {
     req(!map_layers_added())
-    
-    leafletProxy("sfog_map") |>
-      addPolygons(
-        data = r8_forests_sf,
-        color = "darkgreen",
-        weight = 1.2,
-        opacity = 0.8,
-        fillColor = "darkgreen",
-        fillOpacity = 0.15,
-        group = "Region 8 Forests"
-      ) |>
-      addControl(
-        html = legend_html,
-        position = "bottomright",
-        layerId = "sfog_legend"
-      )
     
     set_sfog_overlay(input$hour)
     map_layers_added(TRUE)

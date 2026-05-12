@@ -8,7 +8,7 @@ library(terra)
 library(sf)
 library(htmltools)
 library(lubridate)
-library(raster)
+library(htmlwidgets)
 
 cache_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/ndfd_superfog_cache.rds"
 
@@ -17,8 +17,13 @@ download.file(cache_url, cache_file, mode = "wb")
 
 cache <- readRDS(cache_file)
 
+# Analytical raster used for point/click extraction
 sfog_ll <- terra::unwrap(cache$sfog_ll)
-sfog_leaflet_proj <- cache$sfog_leaflet_proj
+
+# PNG overlays used for fast map display
+sfog_png_data <- unname(as.list(cache$sfog_png_data))
+sfog_png_bounds <- cache$sfog_png_bounds
+
 r8_forests_sf <- cache$r8_forests_sf
 last_refresh <- cache$last_refresh
 
@@ -72,16 +77,11 @@ format_time_et <- function(x, fallback = NULL) {
 # ----------------------------
 # 3. Plotting objects
 # ----------------------------
+
 risk_colors <- c(
   "1" = "#58AFDD",  # Minimal
   "2" = "#FFB000",  # Moderate
   "3" = "#CA0020"   # High
-)
-
-pal <- leaflet::colorFactor(
-  palette = risk_colors,
-  levels = c(1, 2, 3),
-  na.color = "transparent"
 )
 
 legend_html <- HTML('
@@ -99,10 +99,41 @@ legend_html <- HTML('
 
 addResourcePath("favicon", "www")
 
+sfog_overlay_js <- "
+Shiny.addCustomMessageHandler('sfog_set_overlay', function(data) {
+  var widgets = HTMLWidgets.findAll('.leaflet');
+  if (!widgets.length) return;
+
+  var map = null;
+  for (var i = 0; i < widgets.length; i++) {
+    if (widgets[i].getMap) {
+      map = widgets[i].getMap();
+      break;
+    }
+  }
+  if (!map) return;
+
+  if (window.sfogRiskOverlay && map.hasLayer(window.sfogRiskOverlay)) {
+    map.removeLayer(window.sfogRiskOverlay);
+  }
+
+  var bounds = [
+    [data.south, data.west],
+    [data.north, data.east]
+  ];
+
+  window.sfogRiskOverlay = L.imageOverlay(data.url, bounds, {
+    opacity: 0.7,
+    className: 'sfog-png-overlay'
+  }).addTo(map);
+});
+"
+
 ui <- fluidPage(
   titlePanel("USFS Southern Area Superfog Risk"),
   
   tags$head(
+    tags$script(HTML(sfog_overlay_js)),
     tags$link(rel = "icon", type = "image/x-icon", href = "favicon/favicon.ico?v=8"),
     tags$link(rel = "shortcut icon", type = "image/x-icon", href = "favicon/favicon.ico?v=8"),
     tags$link(rel = "icon", type = "image/png", sizes = "32x32", href = "favicon/favicon-32x32.png?v=8"),
@@ -187,27 +218,29 @@ server <- function(input, output, session) {
     paste("Last updated:", format_time_et(last_refresh, fallback = last_refresh))
   })
   
-  # Render basemap first so app appears faster.
   output$sfog_map <- renderLeaflet({
     leaflet() |>
       addProviderTiles(providers$OpenStreetMap.Mapnik) |>
       fitBounds(lng1 = -96, lat1 = 24, lng2 = -74, lat2 = 38)
   })
   
-  # Add heavier layers only after map initializes.
+  set_sfog_overlay <- function(hour_index) {
+    session$sendCustomMessage(
+      type = "sfog_set_overlay",
+      message = list(
+        url = sfog_png_data[[hour_index]],
+        west = sfog_png_bounds$west,
+        south = sfog_png_bounds$south,
+        east = sfog_png_bounds$east,
+        north = sfog_png_bounds$north
+      )
+    )
+  }
+  
   observeEvent(input$sfog_map_bounds, {
     req(!map_layers_added())
     
     leafletProxy("sfog_map") |>
-      addRasterImage(
-        sfog_leaflet_proj[[input$hour]],
-        colors = pal,
-        opacity = 0.7,
-        project = FALSE,
-        method = "ngb",
-        group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
-      ) |>
       addPolygons(
         data = r8_forests_sf,
         color = "darkgreen",
@@ -223,24 +256,14 @@ server <- function(input, output, session) {
         layerId = "sfog_legend"
       )
     
+    set_sfog_overlay(input$hour)
     map_layers_added(TRUE)
   }, ignoreInit = FALSE)
   
   observeEvent(input$hour, {
     req(input$hour)
     req(map_layers_added())
-    
-    leafletProxy("sfog_map") |>
-      clearGroup("Superfog Risk") |>
-      addRasterImage(
-        sfog_leaflet_proj[[input$hour]],
-        colors = pal,
-        opacity = 0.7,
-        project = FALSE,
-        method = "ngb",
-        group = "Superfog Risk",
-        maxBytes = 50 * 1024 * 1024
-      )
+    set_sfog_overlay(input$hour)
   }, ignoreInit = TRUE)
   
   observeEvent(input$prev_hour, {
@@ -345,7 +368,7 @@ server <- function(input, output, session) {
         round(df$lon[1], 4)
       )
     )
-  
+    
     axis(
       side = 2,
       at = c(1, 2, 3),
@@ -358,8 +381,6 @@ server <- function(input, output, session) {
     points(df$time_et, df$risk, pch = 21, bg = point_cols, col = "#333333", cex = 2.1, lwd = 1.2)
     
     axis.POSIXct(side = 1, x = df$time_et, format = "%m/%d\n%H:%M", las = 2)
-    
-    
   })
 }
 

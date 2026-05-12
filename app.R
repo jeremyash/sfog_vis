@@ -366,7 +366,7 @@ server <- function(input, output, session) {
       ) |>
       fitBounds(lng1 = lon - 0.5, lat1 = lat - 0.5, lng2 = lon + 0.5, lat2 = lat + 0.5)
     
-    times_utc <- layet_times
+    times_utc <- layer_times
     
     data.frame(
       time_utc = times_utc,

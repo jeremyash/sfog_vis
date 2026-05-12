@@ -5,6 +5,8 @@ library(sf)
 library(lubridate)
 library(raster)
 library(leaflet)
+library(png)
+library(openssl)
 
 # ----------------------------
 # 1. Region 8 spatial data
@@ -145,6 +147,10 @@ sfog_ll <- terra::mask(sfog_ll, r8_outline_v, touches = TRUE)
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 0, upper = 8, values = TRUE)
 
+# Reclassify original score:
+# 1 = Minimal  (0-3)
+# 2 = Moderate (4-6)
+# 3 = High     (7-8)
 sfog_ll <- terra::ifel(
   sfog_ll <= 3, 1,
   terra::ifel(
@@ -156,7 +162,6 @@ sfog_ll <- terra::ifel(
 sfog_ll <- terra::round(sfog_ll)
 sfog_ll <- terra::clamp(sfog_ll, lower = 1, upper = 3, values = TRUE)
 
-
 if (length(valid_times) == terra::nlyr(sfog_ll)) {
   names(sfog_ll) <- as.character(valid_times)
 } else if (is.null(names(sfog_ll)) || any(names(sfog_ll) == "")) {
@@ -164,14 +169,16 @@ if (length(valid_times) == terra::nlyr(sfog_ll)) {
 }
 
 # ----------------------------
-# 5. Leaflet-projected display raster
+# 5. Leaflet-projected PNG display layers
 # ----------------------------
-# This replaces the failed manual PNG/Web Mercator attempt.
-# The live app can display this with addRasterImage(project = FALSE).
-# sfog_ll remains the source of truth for terra::extract().
+# Only sfog_ll is retained as a raster object in the cache.
+# PNG overlays are generated from Leaflet-projected rasters for fast display.
 
 cache_dir <- "cache"
+png_dir <- file.path(cache_dir, "sfog_pngs")
+
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
+dir.create(png_dir, showWarnings = FALSE, recursive = TRUE)
 
 sfog_ll_tif <- tempfile(fileext = ".tif")
 
@@ -192,13 +199,87 @@ sfog_leaflet_proj <- raster::stack(lapply(seq_len(raster::nlayers(sfog_raster)),
 
 names(sfog_leaflet_proj) <- names(sfog_ll)
 
+# Convert Web Mercator extent to lat/lon bounds for L.imageOverlay().
+e <- raster::extent(sfog_leaflet_proj[[1]])
+
+origin_shift <- 2 * pi * 6378137 / 2
+
+west  <- (e@xmin / origin_shift) * 180
+east  <- (e@xmax / origin_shift) * 180
+
+south <- (e@ymin / origin_shift) * 180
+north <- (e@ymax / origin_shift) * 180
+
+south <- 180 / pi * (2 * atan(exp(south * pi / 180)) - pi / 2)
+north <- 180 / pi * (2 * atan(exp(north * pi / 180)) - pi / 2)
+
+sfog_png_bounds <- list(
+  west = west,
+  south = south,
+  east = east,
+  north = north
+)
+
+risk_colors <- c(
+  "1" = "#58AFDD",
+  "2" = "#FFB000",
+  "3" = "#CA0020"
+)
+
+write_raster_png <- function(r, filename, risk_colors) {
+  vals <- raster::as.matrix(r)
+  
+  vals_chr <- as.character(round(vals))
+  vals_chr[is.na(vals)] <- NA_character_
+  
+  hex <- risk_colors[vals_chr]
+  hex[is.na(hex)] <- "#00000000"
+  
+  rgba <- grDevices::col2rgb(hex, alpha = TRUE) / 255
+  
+  arr <- array(
+    data = as.numeric(rgba),
+    dim = c(4, nrow(vals), ncol(vals))
+  )
+  
+  arr <- aperm(arr, c(2, 3, 1))
+  
+  png::writePNG(arr, target = filename)
+  invisible(filename)
+}
+
+sfog_png_files <- character(raster::nlayers(sfog_leaflet_proj))
+
+for (i in seq_len(raster::nlayers(sfog_leaflet_proj))) {
+  png_name <- sprintf("sfog_%03d.png", i)
+  png_path <- file.path(png_dir, png_name)
+  
+  write_raster_png(
+    r = sfog_leaflet_proj[[i]],
+    filename = png_path,
+    risk_colors = risk_colors
+  )
+  
+  sfog_png_files[[i]] <- png_name
+}
+
+sfog_png_data <- vapply(
+  file.path(png_dir, sfog_png_files),
+  function(path) {
+    b64 <- openssl::base64_encode(readBin(path, "raw", file.info(path)$size))
+    paste0("data:image/png;base64,", b64)
+  },
+  character(1)
+)
+
 # ----------------------------
 # 6. Save cache
 # ----------------------------
 
 cache <- list(
-  sfog_ll = terra::wrap(sfog_ll),                 # analytical source for point extraction
-  sfog_leaflet_proj = sfog_leaflet_proj,          # display source for addRasterImage(project = FALSE)
+  sfog_ll = terra::wrap(sfog_ll),
+  sfog_png_data = sfog_png_data,
+  sfog_png_bounds = sfog_png_bounds,
   r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = lubridate::with_tz(Sys.time(), "UTC")
@@ -208,5 +289,5 @@ saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))
 
 message("Saved cache to: ", file.path(cache_dir, "ndfd_superfog_cache.rds"))
 message("Analytical raster layers: ", terra::nlyr(sfog_ll))
-message("Leaflet display raster layers: ", raster::nlayers(sfog_leaflet_proj))
+message("PNG overlays: ", length(sfog_png_data))
 message("Last refresh: ", as.character(cache$last_refresh))

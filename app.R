@@ -23,7 +23,7 @@ sfog_ll <- terra::unwrap(cache$sfog_ll)
 sfog_png_urls <- unname(as.list(cache$sfog_png_urls))
 sfog_png_bounds <- cache$sfog_png_bounds
 
-r8_forests_sf <- cache$r8_forests_sf
+r8_forests_sf <- readRDS("r8_forests_simplified.rds")
 last_refresh <- cache$last_refresh
 
 layer_labels <- names(sfog_ll)

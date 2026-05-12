@@ -26,10 +26,30 @@ sfog_png_bounds <- cache$sfog_png_bounds
 r8_forests_sf <- readRDS("r8_forests_simplified.rds")
 last_refresh <- cache$last_refresh
 
-layer_labels <- names(sfog_ll)
+raw_times <- cache$valid_times
 
-if (is.null(layer_labels) || any(is.na(layer_labels)) || any(layer_labels == "")) {
-  layer_labels <- paste("Forecast hour", seq_len(terra::nlyr(sfog_ll)))
+if (inherits(raw_times, "POSIXct") || inherits(raw_times, "POSIXt")) {
+  layer_times <- raw_times
+} else {
+  layer_times <- suppressWarnings(lubridate::ymd_hms(
+    gsub(" UTC$", "", as.character(raw_times)),
+    tz = "UTC"
+  ))
+}
+
+if (is.null(layer_times) || length(layer_times) != terra::nlyr(sfog_ll) || any(is.na(layer_times))) {
+  layer_times <- suppressWarnings(lubridate::ymd_hms(
+    gsub(" UTC$", "", as.character(names(sfog_ll))),
+    tz = "UTC"
+  ))
+}
+
+if (is.null(layer_times) || length(layer_times) != terra::nlyr(sfog_ll) || any(is.na(layer_times))) {
+  layer_times <- seq(
+    from = lubridate::floor_date(Sys.time(), "hour"),
+    by = "1 hour",
+    length.out = terra::nlyr(sfog_ll)
+  )
 }
 
 n_layers <- terra::nlyr(sfog_ll)
@@ -210,7 +230,11 @@ server <- function(input, output, session) {
   
   output$valid_time <- renderText({
     req(input$hour)
-    format_time_et(layer_labels[input$hour], fallback = layer_labels[input$hour])
+    
+    format(
+      lubridate::with_tz(layer_times[input$hour], "America/New_York"),
+      "%b %d, %Y %I:%M %p %Z"
+    )
   })
   
   output$last_refresh <- renderText({
@@ -332,7 +356,7 @@ server <- function(input, output, session) {
       ) |>
       fitBounds(lng1 = lon - 0.5, lat1 = lat - 0.5, lng2 = lon + 0.5, lat2 = lat + 0.5)
     
-    times_utc <- parse_time_safe(layer_labels, tz = "UTC")
+    times_utc <- layet_times
     
     data.frame(
       time_utc = times_utc,

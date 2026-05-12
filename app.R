@@ -43,7 +43,7 @@ message("Total app startup seconds: ", round(as.numeric(Sys.time() - t0, units =
 sfog_png_data <- unname(as.list(cache$sfog_png_data))
 sfog_png_bounds <- cache$sfog_png_bounds
 
-r8_forests_sf <- cache$r8_forests_sf
+r8_forests_sf <- readRDS("r8_forests_simplified.rds")
 last_refresh <- cache$last_refresh
 
 layer_labels <- names(sfog_ll)

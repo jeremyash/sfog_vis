@@ -287,7 +287,6 @@ cache <- list(
   sfog_ll = terra::wrap(sfog_ll),          # analytical source for point extraction
   sfog_png_urls = sfog_png_urls,           # display overlays loaded by browser
   sfog_png_bounds = sfog_png_bounds,       # L.imageOverlay bounds
-  r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = lubridate::with_tz(Sys.time(), "UTC")
 )

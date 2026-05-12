@@ -6,7 +6,6 @@ library(lubridate)
 library(raster)
 library(leaflet)
 library(png)
-library(openssl)
 
 # ----------------------------
 # 1. Region 8 spatial data
@@ -169,14 +168,17 @@ if (length(valid_times) == terra::nlyr(sfog_ll)) {
 # ----------------------------
 # 5. Leaflet-projected PNG display layers
 # ----------------------------
-# Only sfog_ll is retained as a raster object in the cache.
-# PNG overlays are generated from Leaflet-projected rasters for fast display.
+# Cache keeps only sfog_ll as the raster object.
+# PNG files are written to cache/sfog_pngs and exposed via raw GitHub URLs.
 
 cache_dir <- "cache"
 png_dir <- file.path(cache_dir, "sfog_pngs")
 
 dir.create(cache_dir, showWarnings = FALSE, recursive = TRUE)
 dir.create(png_dir, showWarnings = FALSE, recursive = TRUE)
+
+# Remove old PNGs so the branch does not accumulate stale frames.
+unlink(file.path(png_dir, "*.png"))
 
 sfog_ll_tif <- tempfile(fileext = ".tif")
 
@@ -197,7 +199,8 @@ sfog_leaflet_proj <- raster::stack(lapply(seq_len(raster::nlayers(sfog_raster)),
 
 names(sfog_leaflet_proj) <- names(sfog_ll)
 
-# Convert Web Mercator extent to lat/lon bounds for L.imageOverlay().
+# Convert Web Mercator extent from projectRasterForLeaflet() to lat/lon
+# bounds used by L.imageOverlay().
 e <- raster::extent(sfog_leaflet_proj[[1]])
 
 origin_shift <- 2 * pi * 6378137 / 2
@@ -261,13 +264,19 @@ for (i in seq_len(raster::nlayers(sfog_leaflet_proj))) {
   sfog_png_files[[i]] <- png_name
 }
 
-sfog_png_data <- vapply(
-  file.path(png_dir, sfog_png_files),
-  function(path) {
-    b64 <- openssl::base64_encode(readBin(path, "raw", file.info(path)$size))
-    paste0("data:image/png;base64,", b64)
-  },
-  character(1)
+# Public raw GitHub URLs. These files are copied to the cache-data branch
+# by the GitHub Actions workflow.
+png_base_url <- "https://raw.githubusercontent.com/jeremyash/sfog_vis/cache-data/cache/sfog_pngs"
+
+# Cache-buster tied to cache build time so browsers do not reuse stale PNGs.
+cache_version <- format(lubridate::with_tz(Sys.time(), "UTC"), "%Y%m%d%H%M%S")
+
+sfog_png_urls <- paste0(
+  png_base_url,
+  "/",
+  sfog_png_files,
+  "?v=",
+  cache_version
 )
 
 # ----------------------------
@@ -275,9 +284,10 @@ sfog_png_data <- vapply(
 # ----------------------------
 
 cache <- list(
-  sfog_ll = terra::wrap(sfog_ll),
-  sfog_png_data = sfog_png_data,
-  sfog_png_bounds = sfog_png_bounds,
+  sfog_ll = terra::wrap(sfog_ll),          # analytical source for point extraction
+  sfog_png_urls = sfog_png_urls,           # display overlays loaded by browser
+  sfog_png_bounds = sfog_png_bounds,       # L.imageOverlay bounds
+  r8_forests_sf = r8_forests_sf,
   valid_times = valid_times,
   last_refresh = lubridate::with_tz(Sys.time(), "UTC")
 )
@@ -286,5 +296,6 @@ saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))
 
 message("Saved cache to: ", file.path(cache_dir, "ndfd_superfog_cache.rds"))
 message("Analytical raster layers: ", terra::nlyr(sfog_ll))
-message("PNG overlays: ", length(sfog_png_data))
+message("PNG overlays: ", length(sfog_png_urls))
+message("PNG directory: ", png_dir)
 message("Last refresh: ", as.character(cache$last_refresh))

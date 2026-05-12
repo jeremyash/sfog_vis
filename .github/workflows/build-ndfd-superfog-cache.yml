@@ -35,11 +35,6 @@ jobs:
           r-version: 'release'
           use-public-rspm: true
 
-      # MASSIVE speedup for sf/terra/raster installs
-      - name: Enable r2u binaries
-        uses: eddelbuettel/github-actions/r2u-setup@master
-
-      # Often no longer needed with r2u, but harmless to keep
       - name: Install spatial system dependencies
         run: |
           sudo apt-get update

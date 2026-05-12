@@ -325,7 +325,7 @@ server <- function(input, output, session) {
     df <- point_risk()
     point_cols <- risk_colors[as.character(df$risk)]
     
-    par(mar = c(6, 4, 4, 6) + 0.1, xpd = TRUE)
+    par(mar = c(6, 6.5, 4, 6) + 0.1, xpd = TRUE)
     
     plot(
       df$time_et,
@@ -333,23 +333,32 @@ server <- function(input, output, session) {
       type = "l",
       lwd = 2,
       col = "#666666",
-      ylim = c(1, 3.2),
+      ylim = c(0.8, 3.2),
       xaxt = "n",
-      xlab = "Valid time",
-      ylab = "Superfog Risk",
-      main = paste0("Superfog Risk at ", round(df$lat[1], 4), ", ", round(df$lon[1], 4))
+      yaxt = "n",
+      xlab = "",
+      ylab = "",
+      main = paste0(
+        "Superfog Risk at ",
+        round(df$lat[1], 4),
+        ", ",
+        round(df$lon[1], 4)
+      )
+    )
+  
+    axis(
+      side = 2,
+      at = c(1, 2, 3),
+      labels = c("Minimal", "Moderate", "High"),
+      las = 1,
+      tick = TRUE,
+      cex.axis = 0.95
     )
     
     points(df$time_et, df$risk, pch = 21, bg = point_cols, col = "#333333", cex = 2.1, lwd = 1.2)
     
     axis.POSIXct(side = 1, x = df$time_et, format = "%m/%d\n%H:%M", las = 2)
     
-    axis(
-      side = 2,
-      at = c(1, 2, 3),
-      labels = c("Minimal", "Moderate", "High"),
-      las = 1
-    )
     
   })
 }

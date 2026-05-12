@@ -160,6 +160,16 @@ ui <- fluidPage(
     tags$link(rel = "apple-touch-icon", sizes = "180x180", href = "favicon/apple-touch-icon.png?v=8")
   ),
   
+  tags$head(
+    tags$style(HTML("
+    .sfog-png-overlay {
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      -ms-interpolation-mode: nearest-neighbor;
+    }
+  "))
+  ), 
+  
   sidebarLayout(
     sidebarPanel(
       fluidRow(

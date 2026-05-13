@@ -280,21 +280,42 @@ sfog_png_urls <- paste0(
 )
 
 # ----------------------------
-# 6. Save cache
+# 6. Save caches
 # ----------------------------
 
-cache <- list(
-  sfog_ll = terra::wrap(sfog_ll),          # analytical source for point extraction
-  sfog_png_urls = sfog_png_urls,           # display overlays loaded by browser
-  sfog_png_bounds = sfog_png_bounds,       # L.imageOverlay bounds
+overlay_info <- tibble::tibble(
+  hour_index = seq_along(valid_times),
+  valid_time = valid_times,
+  png_url = sfog_png_urls,
+  west = sfog_png_bounds$west,
+  south = sfog_png_bounds$south,
+  east = sfog_png_bounds$east,
+  north = sfog_png_bounds$north
+)
+
+display_cache <- list(
+  overlay_info = overlay_info,
   valid_times = valid_times,
   last_refresh = lubridate::with_tz(Sys.time(), "UTC")
 )
 
-saveRDS(cache, file.path(cache_dir, "ndfd_superfog_cache.rds"))
+extract_cache <- list(
+  sfog_ll = terra::wrap(sfog_ll),
+  valid_times = valid_times,
+  last_refresh = display_cache$last_refresh
+)
 
-message("Saved cache to: ", file.path(cache_dir, "ndfd_superfog_cache.rds"))
-message("Analytical raster layers: ", terra::nlyr(sfog_ll))
+saveRDS(
+  display_cache,
+  file.path(cache_dir, "ndfd_superfog_display_cache.rds")
+)
+
+saveRDS(
+  extract_cache,
+  file.path(cache_dir, "ndfd_superfog_extract_cache.rds")
+)
+
+message("Saved display cache to: ", file.path(cache_dir, "ndfd_superfog_display_cache.rds"))
+message("Saved extraction cache to: ", file.path(cache_dir, "ndfd_superfog_extract_cache.rds"))
 message("PNG overlays: ", length(sfog_png_urls))
-message("PNG directory: ", png_dir)
-message("Last refresh: ", as.character(cache$last_refresh))
+message("Last refresh: ", as.character(display_cache$last_refresh))

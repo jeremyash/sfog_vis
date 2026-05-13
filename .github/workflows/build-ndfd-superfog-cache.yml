@@ -54,6 +54,7 @@ jobs:
             any::raster
             any::leaflet
             any::png
+            any::tibble
 
       - name: Build cache
         run: |

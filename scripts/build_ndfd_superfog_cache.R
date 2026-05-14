@@ -280,6 +280,23 @@ sfog_png_urls <- paste0(
 )
 
 # ----------------------------
+# 5b. Extraction lookup table
+# ----------------------------
+
+sfog_extract_df <- terra::as.data.frame(
+  sfog_ll,
+  xy = TRUE,
+  cells = TRUE,
+  na.rm = TRUE
+)
+
+names(sfog_extract_df)[names(sfog_extract_df) == "x"] <- "lon"
+names(sfog_extract_df)[names(sfog_extract_df) == "y"] <- "lat"
+
+sfog_extract_df <- sfog_extract_df |>
+  tibble::as_tibble()
+
+# ----------------------------
 # 6. Save caches
 # ----------------------------
 
@@ -300,7 +317,7 @@ display_cache <- list(
 )
 
 extract_cache <- list(
-  sfog_ll = terra::wrap(sfog_ll),
+  sfog_extract_df = sfog_extract_df,
   valid_times = valid_times,
   last_refresh = display_cache$last_refresh
 )

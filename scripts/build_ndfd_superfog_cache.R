@@ -127,17 +127,6 @@ if (is.null(valid_times) || all(is.na(valid_times))) {
   )
 }
 
-# ----------------------------
-# Debug weather layers
-# ----------------------------
-debug_weather_layers <- list(
-  temp_f = terra::wrap(r_temp),
-  rh = terra::wrap(r_rh),
-  wind_mph = terra::wrap(r_wind),
-  sky = terra::wrap(r_sky),
-  valid_times = valid_times,
-  last_refresh = lubridate::with_tz(Sys.time(), "UTC")
-)
 
 sfog <- classify_superfog_score(
   temp = r_temp,
@@ -345,13 +334,8 @@ saveRDS(
   file.path(cache_dir, "ndfd_superfog_extract_cache.rds")
 )
 
-saveRDS(
-  debug_weather_layers,
-  file.path(cache_dir, "debug_weather_layers.rds")
-)
 
 message("Saved display cache to: ", file.path(cache_dir, "ndfd_superfog_display_cache.rds"))
 message("Saved extraction cache to: ", file.path(cache_dir, "ndfd_superfog_extract_cache.rds"))
-message("Saved debug weather layer cache to: ", file.path(cache_dir, "debug_weather_layers.rds"))
 message("PNG overlays: ", length(sfog_png_urls))
 message("Last refresh: ", as.character(display_cache$last_refresh))

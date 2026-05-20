@@ -353,5 +353,6 @@ saveRDS(
 
 message("Saved display cache to: ", file.path(cache_dir, "ndfd_superfog_display_cache.rds"))
 message("Saved extraction cache to: ", file.path(cache_dir, "ndfd_superfog_extract_cache.rds"))
+message("Saved debug weather layer cache to: ", file.path(cache_dir, "debug_weather_layers.rds"))
 message("PNG overlays: ", length(sfog_png_urls))
 message("Last refresh: ", as.character(display_cache$last_refresh))

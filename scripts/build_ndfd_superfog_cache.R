@@ -127,6 +127,7 @@ if (is.null(valid_times) || all(is.na(valid_times))) {
   )
 }
 
+
 sfog <- classify_superfog_score(
   temp = r_temp,
   rh   = r_rh,
@@ -322,17 +323,6 @@ extract_cache <- list(
   last_refresh = display_cache$last_refresh
 )
 
-saveRDS(
-  list(
-    temp_f = temp_f_ll,
-    rh = rh_ll,
-    wind_mph = wind_ll,
-    sky = sky_ll,
-    valid_times = valid_times,
-    last_refresh = Sys.time()
-  ),
-  "cache/debug_weather_layers.rds"
-)
 
 saveRDS(
   display_cache,

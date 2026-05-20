@@ -64,13 +64,14 @@ jobs:
       - name: Copy cache to cache branch
         run: |
           mkdir -p cache-repo/cache
-
+      
           cp main-repo/cache/ndfd_superfog_display_cache.rds cache-repo/cache/
           cp main-repo/cache/ndfd_superfog_extract_cache.rds cache-repo/cache/
-
+          cp main-repo/cache/debug_weather_layers.rds cache-repo/cache/
+      
           rm -rf cache-repo/cache/sfog_pngs
           cp -R main-repo/cache/sfog_pngs cache-repo/cache/
-
+      
       - name: Commit updated cache
         run: |
           cd cache-repo
@@ -80,6 +81,7 @@ jobs:
       
           git add cache/ndfd_superfog_display_cache.rds
           git add cache/ndfd_superfog_extract_cache.rds
+          git add cache/debug_weather_layers.rds
           git add cache/sfog_pngs
       
           git commit -m "Update NDFD superfog split caches" || echo "No changes to commit"

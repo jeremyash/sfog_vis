@@ -323,6 +323,18 @@ extract_cache <- list(
 )
 
 saveRDS(
+  list(
+    temp_f = temp_f_ll,
+    rh = rh_ll,
+    wind_mph = wind_ll,
+    sky = sky_ll,
+    valid_times = valid_times,
+    last_refresh = Sys.time()
+  ),
+  "cache/debug_weather_layers.rds"
+)
+
+saveRDS(
   display_cache,
   file.path(cache_dir, "ndfd_superfog_display_cache.rds")
 )

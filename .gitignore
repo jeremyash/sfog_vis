@@ -7,3 +7,5 @@ rsconnect/
 cache/
 ndfd_region8/
 .DS_Store
+r8_forests/
+debug_superfog_layers/
